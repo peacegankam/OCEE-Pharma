@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+
+{% block title %}Stocks — OCEE PHARMA{% endblock %}
+{% block page_title %}Mouvements de Stock{% endblock %}
+
+{% block content %}
+
+<div class="page-layout">
+
+    <!-- ── Formulaire Ajustement ── -->
+    <div class="sidebar-form">
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">⚖️ Ajuster un Stock</span>
+            </div>
+            <div class="card-body">
+                <form id="form-ajust-stock">
+                    <div class="form-group">
+                        <label>Sélectionner le produit</label>
+                        <select id="ajust-produit" name="produit_id" required onchange="chargerInfoStockAjust()">
+                            <option value="">— Choisir —</option>
+                        </select>
+                    </div>
+
+                    <div class="stock-info-panel" id="stock-info-ajust" style="display:none;">
+                        <div class="stock-info-ligne">
+                            <span>Quantité actuelle</span>
+                            <span id="ajust-stock-actuel" class="bold">—</span>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Type d'opération</label>
+                        <div class="btn-group-toggle">
+                            <input type="radio" name="type" value="ajout" id="type-entree" checked />
+                            <label for="type-entree" class="label-green">Entrée (+)</label>
+                            
+                            <input type="radio" name="type" value="retrait" id="type-sortie" />
+                            <label for="type-sortie" class="label-red">Sortie (−)</label>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Quantité</label>
+                        <input type="number" id="ajust-quantite" name="quantite" min="1" value="1" required />
+                    </div>
+
+                    <div class="form-group">
+                        <label>Raison / Note</label>
+                        <textarea id="ajust-raison" name="raison" placeholder="ex: Correction inventaire, Casse, etc."></textarea>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-full">
+                        Valider l'Ajustement
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Alertes de stock -->
+        <div class="card mt-1">
+            <div class="card-header">
+                <span class="card-title text-red">⚠️ Ruptures & Alertes</span>
+            </div>
+            <div class="card-body p0">
+                <div class="alert-list" id="liste-alertes-stock">
+                    <!-- Chargement... -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Historique des Mouvements ── -->
+    <div class="main-panel">
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">📜 Journal des Mouvements</span>
+                <div class="header-actions">
+                    <button class="btn btn-ghost btn-sm" onclick="chargerHistoriqueStock()">⟳ Actualiser</button>
+                </div>
+            </div>
+            <div class="card-body p0">
+                <table class="data-table" id="table-mouvements-stock">
+                    <thead>
+                        <tr>
+                            <th>Date / Heure</th>
+                            <th>Produit</th>
+                            <th>Type</th>
+                            <th>Qté</th>
+                            <th>Auteur</th>
+                            <th>Note</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Chargement... -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        chargerProduitsSelectStock();
+        chargerHistoriqueStock();
+        chargerAlertesStocks();
+        document.getElementById('form-ajust-stock').addEventListener('submit', soumettreAjustement);
+    });
+
+    async function chargerProduitsSelectStock() {
+        const res = await fetch('/api/produits/');
+        const data = await res.json();
+        if (data.success) {
+            const select = document.getElementById('ajust-produit');
+            select.innerHTML = '<option value="">— Choisir —</option>' + 
+                data.produits.map(p => `<option value="${p.id}" data-stock="${p.stock_actuel}">${p.nom}</option>`).join('');
+        }
+    }
+
+    function chargerInfoStockAjust() {
+        const select = document.getElementById('ajust-produit');
+        const opt = select.options[select.selectedIndex];
+        const panel = document.getElementById('stock-info-ajust');
+        if (opt.value) {
+            panel.style.display = 'block';
+            document.getElementById('ajust-stock-actuel').textContent = opt.dataset.stock;
+        } else {
+            panel.style.display = 'none';
+        }
+    }
+
+    async function chargerHistoriqueStock() {
+        const res = await fetch('/api/stocks/historique');
+        const data = await res.json();
+        const tbody = document.querySelector('#table-mouvements-stock tbody');
+        if (data.success) {
+            tbody.innerHTML = data.mouvements.map(h => `
+                <tr>
+                    <td class="text-sm">${new Date(h.date_mouvement).toLocaleString()}</td>
+                    <td class="bold">${h.produit}</td>
+                    <td>
+                        <span class="badge ${h.type === 'ajout' || h.type === 'appro' ? 'badge-green' : 'badge-red'}">
+                            ${h.type.toUpperCase()}
+                        </span>
+                    </td>
+                    <td class="bold">${h.quantite_apres - h.quantite_avant}</td>
+                    <td><span class="text-sm">Admin</span></td>
+                    <td class="text-muted text-sm italic">${h.raison || '—'}</td>
+                </tr>
+            `).join('') || '<tr><td colspan="6" class="table-empty">Aucun mouvement</td></tr>';
+        }
+    }
+
+    async function chargerAlertesStocks() {
+        const res = await fetch('/api/dashboard/stocks-critiques');
+        const data = await res.json();
+        const list = document.getElementById('liste-alertes-stock');
+        if (data.success) {
+            list.innerHTML = data.stocks.map(s => `
+                <div class="alert-item ${s.quantite === 0 ? 'rupture' : 'critique'}">
+                    <div class="alert-icon">${s.quantite === 0 ? '🚫' : '⚠️'}</div>
+                    <div class="alert-content">
+                        <div class="alert-title">${s.nom}</div>
+                        <div class="alert-meta">Reste: <strong>${s.quantite}</strong> (Seuil: ${s.seuil_alerte})</div>
+                    </div>
+                </div>
+            `).join('') || '<div class="alert-item success">✅ Tout est en stock</div>';
+        }
+    }
+
+    function soumettreAjustement(e) {
+        e.preventDefault();
+        
+        const data = {
+            produit_id: parseInt(document.getElementById('ajust-produit').value),
+            quantite: parseInt(document.getElementById('ajust-quantite').value),
+            type: document.querySelector('input[name="type"]:checked').value,
+            raison: document.getElementById('ajust-raison').value
+        };
+
+        if (!data.produit_id || isNaN(data.quantite)) {
+            afficherNotif('Veuillez remplir les champs obligatoires', 'warning');
+            return;
+        }
+
+        fetch('/api/stocks/ajuster', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        })
+        .then(r => r.json())
+        .then(res => {
+            if (res.success) {
+                afficherNotif('✅ Stock mis à jour', 'success');
+                e.target.reset();
+                document.getElementById('stock-info-ajust').style.display = 'none';
+                chargerProduitsSelectStock();
+                chargerHistoriqueStock();
+                chargerAlertesStocks();
+            } else {
+                afficherNotif(res.message, 'error');
+            }
+        })
+        .catch(err => {
+            console.error('Erreur:', err);
+            afficherNotif('Erreur lors de l\'envoi', 'error');
+        });
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,669 @@
+{% extends "base.html" %}
+
+{% block title %}Approvisionnement — OCEE PHARMA{% endblock %}
+{% block page_title %}Approvisionnement{% endblock %}
+
+{% block content %}
+
+<div class="page-layout">
+
+    {% if session.get('role') == 'admin' %}
+
+    <!-- ── Formulaire appro (admin uniquement) ── -->
+    <div class="sidebar-form">
+
+        <div class="card">
+
+            <div class="card-header">
+                <span class="card-title">🚚 Nouvelle Livraison</span>
+            </div>
+            <div class="card-body">
+                <!-- NOTE: Le bouton Enregistrer doit rester visible côté employés (désactivation gérée par JS). -->
+                <form id="form-appro" autocomplete="off">
+
+
+                    <div class="form-group">
+                        <label>Filtrer par société</label>
+                        <select id="appro-societe-filtre" onchange="filtrerProduitsAppro()">
+                            <option value="">Toutes</option>
+                            <option value="Antibiotiques">Antibiotiques</option>
+                            <option value="Analgésiques">Analgésiques</option>
+                            <option value="Vitamines">Vitamines</option>
+                            <option value="Dermatologie">Dermatologie</option>
+                            <option value="Matériel Médical">Matériel Médical</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="appro-produit">Produit reçu</label>
+                        <select id="appro-produit" name="produit_id" required onchange="afficherInfoProduitAppro()">
+                            <option value="">— Sélectionner —</option>
+                        </select>
+                    </div>
+
+                    <!-- Info stock actuel -->
+                    <div class="stock-info-panel" id="stock-info-appro" style="display:none;">
+                        <div class="stock-info-ligne">
+                            <span>Stock actuel</span>
+                            <span id="appro-stock-actuel" class="bold">—</span>
+                        </div>
+                        <div class="stock-info-ligne">
+                            <span>Seuil d'alerte</span>
+                            <span id="appro-seuil" class="bold">—</span>
+                        </div>
+                        <div class="stock-info-ligne">
+                            <span>Date de péremption</span>
+                            <span id="appro-peremption" class="bold">—</span>
+                        </div>
+                        <div class="stock-info-ligne">
+                            <span>Statut péremption</span>
+                            <span id="appro-peremption-status" class="bold">—</span>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="appro-quantite">Quantité reçue</label>
+                        <div class="qty-control">
+                            <button type="button" class="qty-btn" onclick="ajusterQteAppro(-1)">−</button>
+                            <input type="number" id="appro-quantite" name="quantite" min="1" value="1"
+                                onchange="calculerCoutUnitaire()" />
+                            <button type="button" class="qty-btn" onclick="ajusterQteAppro(1)">+</button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="appro-cout">Coût total payé (FCFA)</label>
+                        <input type="number" id="appro-cout" name="cout_total" min="0" value="0"
+                            oninput="calculerCoutUnitaire()" />
+                    </div>
+
+                    <!-- Cout unitaire calculé -->
+                    <div class="prix-panel" id="cout-unitaire-panel" style="display:none;">
+                        <div class="prix-ligne">
+                            <span class="prix-label">Coût unitaire calculé</span>
+                            <span class="prix-val" id="cout-unitaire">— FCFA</span>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="appro-fournisseur">Fournisseur / livreur</label>
+                        <input type="text" id="appro-fournisseur" name="fournisseur" placeholder="Optionnel" />
+                    </div>
+
+                    <button id="btn-enregistrer-livraison" type="submit" class="btn btn-primary btn-full btn-lg">
+                        📥 Enregistrer la Livraison
+                    </button>
+
+                </form>
+            </div>
+        </div>
+    </div>
+
+
+        <!-- Résumé dépenses du jour -->
+        <div class="card mt-1">
+            <div class="card-header">
+                <span class="card-title">💸 Dépenses du Jour</span>
+            </div>
+            <div class="card-body">
+                <div class="mini-kpis-vertical">
+                    <div class="mini-kpi-v">
+                        <div class="mini-kpi-val" id="appro-depenses-jour">0 FCFA</div>
+                        <div class="mini-kpi-label">Total dépensé aujourd'hui</div>
+                    </div>
+                    <div class="mini-kpi-v">
+                        <div class="mini-kpi-val" id="appro-nb-livraisons">0</div>
+                        <div class="mini-kpi-label">Livraisons enregistrées</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Historique ── -->
+    <div class="main-panel">
+
+        <!-- Filtres historique -->
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">📋 Historique des Livraisons</span>
+                <div class="header-actions">
+                    <input type="date" id="appro-date-debut" class="input-sm" />
+                    <span class="date-sep">→</span>
+                    <input type="date" id="appro-date-fin" class="input-sm" />
+                    <button class="btn btn-ghost btn-sm" onclick="chargerHistoriqueAppro()">
+                        Filtrer
+                    </button>
+                </div>
+            </div>
+            <div class="card-body p0">
+                <table class="data-table" id="table-appro">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Produit</th>
+                            <th>Société</th>
+                            <th>Qté Reçue</th>
+                            <th>Coût Total</th>
+                            <th>Coût Unitaire</th>
+                            <th>Fournisseur</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td colspan="7" class="table-empty">Aucun approvisionnement</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Graphique dépenses par semaine -->
+        <div class="card mt-1" style="margin-top: 1rem;">
+
+            <!-- ── Bon de commande (médicaments en alerte) ── -->
+            <div class="card-header">
+                <span class="card-title">🧾 Bon de commande (stock en alerte)</span>
+                <span class="card-badge">À préparer</span>
+            </div>
+            <div class="card-body">
+                <div style="margin-bottom: .75rem;">
+                    <button type="button" class="btn btn-primary" onclick="creerBonCommande()">
+                        Créer bon de commande
+                    </button>
+                </div>
+
+                <div id="bon-commande-zone" style="display:none;">
+                    <div class="table-responsive">
+                        <table class="data-table" id="table-bon-commande">
+                            <thead>
+                                <tr>
+                                    <th>Médicament</th>
+                                    <th>Société</th>
+                                    <th>Stock</th>
+                                    <th>Seuil</th>
+                                    <th>Qté à commander</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- lignes injectées -->
+                            </tbody>
+                        </table>
+                    </div>
+                    <div style="display:flex; gap:1rem; align-items:center; margin-top: .75rem; flex-wrap: wrap;">
+                        <div class="form-group" style="margin:0;">
+                            <label>Fournisseur</label>
+                            <input type="text" id="bon-commande-fournisseur" placeholder="Nom du fournisseur" />
+                        </div>
+                        <div class="form-group" style="margin:0;">
+                            <label>Date</label>
+                            <input type="date" id="bon-commande-date" />
+                        </div>
+                        <div>
+                            <button type="button" class="btn btn-success" onclick="validerBonCommande()">
+                                Valider
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- fin bon de commande -->
+
+        <div class="card mt-1">
+
+            <div class="card-header">
+                <span class="card-title">📊 Dépenses d'approvisionnement</span>
+                <span class="card-badge">7 derniers jours</span>
+            </div>
+            <div class="card-body">
+                <canvas id="chart-depenses-appro" height="200"></canvas>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+    {% else %}
+        <div class="page-layout" style="padding: 1rem;">
+            <div class="card">
+                <div class="card-body">
+                    <div style="color: var(--text-muted);">
+                        Accès refusé : le bon de commande et l’enregistrement des livraisons sont réservés au gérant.
+                    </div>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+<script>
+    let tousLesProduits = [];
+
+    document.addEventListener('DOMContentLoaded', () => {
+        chargerProduitsSelectAppro();
+        chargerHistoriqueAppro();
+        chargerDepensesJour();
+        chargerGraphiqueDepenses();
+
+        // Dates par défaut : cette semaine
+        const aujourd = new Date();
+        const lundi = new Date(aujourd);
+        lundi.setDate(aujourd.getDate() - aujourd.getDay() + 1);
+        document.getElementById('appro-date-debut').value = lundi.toISOString().slice(0, 10);
+        document.getElementById('appro-date-fin').value = aujourd.toISOString().slice(0, 10);
+
+        document.getElementById('form-appro').addEventListener('submit', soumettreAppro);
+    });
+
+    async function chargerProduitsSelectAppro() {
+        try {
+            const response = await fetch('/api/produits/');
+            const data = await response.json();
+            if (data.success) {
+                tousLesProduits = data.produits;
+                remplirSelectProduits(tousLesProduits);
+            }
+        } catch (error) {
+            console.error('Erreur chargement produits:', error);
+        }
+    }
+
+    function remplirSelectProduits(produits) {
+        const select = document.getElementById('appro-produit');
+        const currentVal = select.value;
+        
+        select.innerHTML = '<option value="">— Sélectionnée —</option>' + 
+            produits.map(p => `<option value="${p.id}">${p.nom}</option>`).join('');
+        
+        select.value = currentVal;
+    }
+
+    function filtrerProduitsAppro() {
+        const societe = document.getElementById('appro-societe-filtre').value;
+        if (!societe) {
+            remplirSelectProduits(tousLesProduits);
+        } else {
+            const filtrés = tousLesProduits.filter(p => p.societe === societe);
+            remplirSelectProduits(filtrés);
+        }
+    }
+
+    function afficherInfoProduitAppro() {
+        const id = document.getElementById('appro-produit').value;
+        const panel = document.getElementById('stock-info-appro');
+        const btnEnregistrer = document.getElementById('btn-enregistrer-livraison');
+
+        // Role injecté par Flask côté template
+        const roleUser = '{{ session.get("role", "") }}';
+        const isAdmin = roleUser === 'admin';
+
+
+        if (!id) {
+            panel.style.display = 'none';
+            if (btnEnregistrer) btnEnregistrer.disabled = false;
+            return;
+        }
+
+        fetch(`/api/produits/${id}`)
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    panel.style.display = 'block';
+                    const stockActuel = Number(res.produit.stock_actuel ?? 0);
+                    const seuilAlerte = Number(res.produit.seuil_alerte ?? 0);
+
+                    if (Number.isNaN(stockActuel)) {
+                        console.warn('stock_actuel NaN, valeur:', res.produit.stock_actuel);
+                    }
+
+                    if (Number.isNaN(seuilAlerte)) {
+                        console.warn('seuil_alerte NaN, valeur:', res.produit.seuil_alerte);
+                    }
+
+                    document.getElementById('appro-stock-actuel').textContent = stockActuel;
+                    document.getElementById('appro-seuil').textContent = seuilAlerte;
+
+                    // Péremption
+                    const datePeremptionRaw = res.produit.date_peremption;
+                    const approPeremptionEl = document.getElementById('appro-peremption');
+                    const approPeremptionStatusEl = document.getElementById('appro-peremption-status');
+
+                    if (!datePeremptionRaw) {
+                        if (approPeremptionEl) approPeremptionEl.textContent = 'N/A';
+                        if (approPeremptionStatusEl) approPeremptionStatusEl.textContent = '—';
+                    } else {
+                        // date_peremption peut être 'YYYY-MM-DD'
+                        const iso = String(datePeremptionRaw);
+                        const dp = new Date(iso.length === 10 ? iso + 'T00:00:00' : iso);
+                        const now = new Date();
+                        const ms = dp.getTime() - new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+                        const joursRestants = Math.ceil(ms / (1000 * 60 * 60 * 24));
+
+                        const dateTxt = (iso.length >= 10)
+                            ? iso
+                            : (dp.toLocaleDateString ? dp.toLocaleDateString('fr-FR') : iso);
+
+                        if (approPeremptionEl) approPeremptionEl.textContent = dateTxt;
+
+                        if (approPeremptionStatusEl) {
+                            let cls = 'ok';
+                            let txt = 'OK';
+
+                            // 2=alerte bloquante : si <= 7 jours => critique
+                            if (joursRestants <= 7) {
+                                cls = 'critique';
+                                txt = 'Critique';
+                                approPeremptionStatusEl.style.color = 'var(--red)';
+                            } else if (joursRestants <= 30) {
+                                cls = 'surveillance';
+                                txt = 'À surveiller';
+                                approPeremptionStatusEl.style.color = 'var(--yellow)';
+                            } else {
+                                cls = 'ok';
+                                txt = 'OK';
+                                approPeremptionStatusEl.style.color = 'var(--green)';
+                            }
+
+                            approPeremptionStatusEl.textContent = `${txt}`;
+                        }
+
+                        // Même si tu as demandé “pas bloquante”, on affiche une couleur en conséquence.
+                    }
+
+                    // Bloquer côté frontend: employés ne peuvent pas valider si stock <= seuil
+                    const enAlerte = stockActuel <= seuilAlerte;
+                    if (btnEnregistrer) {
+                        btnEnregistrer.disabled = (!isAdmin && enAlerte);
+                        if (!isAdmin && enAlerte) {
+                            btnEnregistrer.title = "Action réservée au gérant : livraison pour produit en rupture/alerte.";
+                            btnEnregistrer.style.opacity = '0.6';
+                        } else {
+                            btnEnregistrer.title = '';
+                            btnEnregistrer.style.opacity = '1';
+                        }
+                    }
+
+                    // Pré-remplir le prix d'achat s'il est connu
+                    const qte = parseInt(document.getElementById('appro-quantite').value) || 1;
+                    document.getElementById('appro-cout').value = (res.produit.prix_achat * qte);
+                    calculerCoutUnitaire();
+                }
+            });
+    }
+
+
+    function chargerHistoriqueAppro() {
+        const debut = document.getElementById('appro-date-debut').value;
+        const fin = document.getElementById('appro-date-fin').value;
+        
+        fetch(`/api/appro/historique?debut=${debut}&fin=${fin}`)
+            .then(r => r.json())
+            .then(res => {
+                const tbody = document.querySelector('#table-appro tbody');
+                if (res.success && res.approvisionnements.length > 0) {
+                    tbody.innerHTML = res.approvisionnements.map(a => `
+                        <tr>
+                            <td>${new Date(a.date_appro).toLocaleDateString()}</td>
+                            <td><strong>${a.produit}</strong></td>
+                            <td>${badgeSociete(a.societe)}</td>
+                            <td>${a.quantite}</td>
+                            <td>${formaterFCFA(a.quantite * a.prix_achat_unitaire)}</td>
+                            <td>${formaterFCFA(a.prix_achat_unitaire)}</td>
+                            <td>${a.fournisseur || '—'}</td>
+                        </tr>
+                    `).join('');
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="7" class="table-empty">Aucun approvisionnement trouvé</td></tr>';
+                }
+            });
+    }
+
+    function chargerDepensesJour() {
+        fetch('/api/appro/stats')
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    document.getElementById('appro-depenses-jour').textContent = formaterFCFA(res.total_depenses);
+                    document.getElementById('appro-nb-livraisons').textContent = res.nb_appro;
+                }
+            });
+    }
+
+    function soumettreAppro(e) {
+        e.preventDefault();
+        const id = document.getElementById('appro-produit').value;
+        const qte = parseInt(document.getElementById('appro-quantite').value);
+        const coutTotal = parseFloat(document.getElementById('appro-cout').value);
+        
+        if (!id || !qte || isNaN(coutTotal)) {
+            afficherNotif('Veuillez remplir tous les champs', 'warning');
+            return;
+        }
+
+        const data = {
+            produit_id: parseInt(id),
+            quantite: qte,
+            prix_achat_unitaire: coutTotal / qte,
+            note: document.getElementById('appro-fournisseur').value
+        };
+
+        fetch('/api/appro/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    afficherNotif('📥 Livraison enregistrée avec succès !', 'success');
+                    e.target.reset();
+                    document.getElementById('stock-info-appro').style.display = 'none';
+                    document.getElementById('cout-unitaire-panel').style.display = 'none';
+                    chargerHistoriqueAppro();
+                    chargerDepensesJour();
+                    if (typeof chargerGraphiqueDepenses === 'function') chargerGraphiqueDepenses();
+                } else {
+                    afficherNotif(res.message || 'Erreur lors de l\'enregistrement', 'error');
+                }
+            })
+            .catch(err => {
+                afficherNotif('Erreur réseau', 'error');
+            });
+    }
+
+    function calculerCoutUnitaire() {
+        const qte = parseFloat(document.getElementById('appro-quantite').value) || 0;
+        const cout = parseFloat(document.getElementById('appro-cout').value) || 0;
+        const panel = document.getElementById('cout-unitaire-panel');
+        if (qte > 0 && cout > 0) {
+            panel.style.display = 'block';
+            document.getElementById('cout-unitaire').textContent =
+                Math.round(cout / qte).toLocaleString('fr-FR') + ' FCFA';
+        } else {
+            panel.style.display = 'none';
+        }
+    }
+
+    function ajusterQteAppro(delta) {
+        const input = document.getElementById('appro-quantite');
+        input.value = Math.max(1, parseInt(input.value || 1) + delta);
+        calculerCoutUnitaire();
+    }
+
+    function chargerGraphiqueDepenses() {
+        fetch('/api/appro/depenses-semaine')
+            .then(r => r.json())
+            .then(data => {
+                const ctx = document.getElementById('chart-depenses-appro').getContext('2d');
+                if (window.myChartAppro) window.myChartAppro.destroy();
+                window.myChartAppro = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: data.map(d => d.date),
+                        datasets: [{
+                            label: 'Dépenses (FCFA)',
+                            data: data.map(d => d.montant),
+                            borderColor: '#2A9D8F',
+                            backgroundColor: 'rgba(42, 157, 143, 0.1)',
+                            fill: true,
+                            tension: 0.4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false }
+                        },
+                        scales: {
+                            y: { beginAtZero: true }
+                        }
+                    }
+                });
+            });
+    }
+
+
+    // ─────────────────────────────────────────────────────────
+    // Bon de commande : stock en alerte
+    // ─────────────────────────────────────────────────────────
+
+    async function creerBonCommande() {
+        try {
+            const zone = document.getElementById('bon-commande-zone');
+            const tbody = document.querySelector('#table-bon-commande tbody');
+            const fournisseurEl = document.getElementById('bon-commande-fournisseur');
+            const dateEl = document.getElementById('bon-commande-date');
+
+            if (!zone || !tbody) return;
+
+            // On réutilise l'API stocks critiques (ruputure/alerte)
+            const res = await fetch('/api/stocks/critiques');
+            const data = await res.json();
+
+            // Selon implémentation, soit {success:true, stocks:[...]}, soit tableau direct
+            const stocks = (Array.isArray(data)) ? data : (data.stocks || []);
+
+            if (!stocks.length) {
+                tbody.innerHTML = '<tr><td colspan="5" class="table-empty">✅ Aucun produit en alerte</td></tr>';
+                zone.style.display = 'block';
+                return;
+            }
+
+            const aujourd = new Date();
+            const dateISO = aujourd.toISOString().slice(0,10);
+            if (dateEl) dateEl.value = dateISO;
+
+            zone.style.display = 'block';
+            tbody.innerHTML = stocks.map(s => {
+                // Quantité à commander : simple règle (pour couvrir jusqu'à 2x seuil)
+                const stock = parseInt(s.quantite ?? 0);
+                const seuil = parseInt(s.seuil_alerte ?? 0);
+                const cible = Math.max(seuil * 2, seuil + 1);
+                const qte = Math.max(1, cible - stock);
+
+                return `
+                    <tr>
+                        <td><strong>${s.nom}</strong></td>
+                        <td>${badgeSociete(s.societe)}</td>
+                        <td>${stock}</td>
+                        <td>${seuil}</td>
+                        <td>
+                            <input type="number" min="1" value="${qte}" id="bon-qte-${s.id}" />
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            if (fournisseurEl && !fournisseurEl.value) {
+                fournisseurEl.value = '';
+            }
+        } catch (e) {
+            afficherNotif('Erreur chargement bon de commande', 'error');
+        }
+    }
+
+    async function validerBonCommande() {
+        try {
+            const fournisseur = document.getElementById('bon-commande-fournisseur').value || '';
+            const date = document.getElementById('bon-commande-date').value;
+
+            if (!date) {
+                afficherNotif('Choisir une date pour le bon de commande', 'warning');
+                return;
+            }
+
+            // Récupérer les lignes
+            const rows = Array.from(document.querySelectorAll('#table-bon-commande tbody tr'));
+            if (!rows.length) {
+                afficherNotif('Aucun article à commander', 'warning');
+                return;
+            }
+
+            const commandes = [];
+            for (const row of rows) {
+                const input = row.querySelector('input[type="number"]');
+                if (!input) continue;
+                const qte = parseInt(input.value || '0');
+                if (!qte || qte < 1) continue;
+
+                const inputId = input.id; // bon-qte-<id>
+                const produitId = parseInt(inputId.replace('bon-qte-',''));
+
+                // Le prix d'achat unitaire servira ensuite à l'appro si tu l'intègres
+                // Pour l'instant on enregistre au minimum quantité et fournisseur.
+                commandes.push({ produit_id: produitId, quantite: qte });
+            }
+
+            if (!commandes.length) {
+                afficherNotif('Quantités invalides pour le bon de commande', 'warning');
+                return;
+            }
+
+            // Mode : on affiche/valide sans enregistrer une vraie table "bon"
+            // Envoie une requête au backend pour enregistrer des appros correspondant aux quantités.
+            // Note: Backend attend aussi prix_achat_unitaire.
+
+            // Pour simplifier: on récupère prix_achat depuis /api/produits/<id>
+            for (const c of commandes) {
+                const p = await fetch(`/api/produits/${c.produit_id}`).then(r => r.json());
+                if (!p.success) continue;
+                c.prix_achat_unitaire = p.produit.prix_achat;
+                c.note = `Bon de commande (${date}) - ${fournisseur || 'Fournisseur'} `;
+            }
+
+            const resp = await fetch('/api/appro/bon-commande', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ date, fournisseur, lignes: commandes })
+            });
+
+            const out = await resp.json();
+            if (!resp.ok || !out.success) {
+                afficherNotif(out.message || 'Erreur validation bon de commande', 'error');
+                return;
+            }
+
+            afficherNotif('✅ Bon de commande validé et livraisons créées', 'success');
+            // Optionnel: recharger stats/graph
+            chargerDepensesJour();
+            chargerHistoriqueAppro();
+            if (typeof chargerGraphiqueDepenses === 'function') chargerGraphiqueDepenses();
+            const zone = document.getElementById('bon-commande-zone');
+            if (zone) zone.style.display = 'none';
+        } catch (e) {
+            afficherNotif('Erreur réseau pendant la validation', 'error');
+        }
+    }
+
+
+
+
+</script>
+{% endblock %}

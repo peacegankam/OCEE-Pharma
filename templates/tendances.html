@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+
+{% block title %}Tendances & IA — OCEE PHARMA{% endblock %}
+{% block page_title %}Prévisions & Intelligence Artificielle{% endblock %}
+
+{% block content %}
+<div class="ml-container">
+
+    <!-- ── Barre d'outils ML ── -->
+    <div class="card mb-1">
+        <div class="card-body">
+            <div class="controls-row">
+                <div class="control-group">
+                    <label>Période de prévision</label>
+                    <select id="ml-period">
+                        <option value="7">7 prochains jours</option>
+                        <option value="14">14 prochains jours</option>
+                        <option value="30">30 prochains jours</option>
+                    </select>
+                </div>
+                <div class="control-group align-bottom">
+                    <button class="btn btn-primary" id="ml-generate-btn">
+                        🚀 Lancer l'Analyse
+                    </button>
+                    <button class="btn btn-ghost" id="ml-refresh-btn">
+                        🔄 Réentraîner
+                    </button>
+                    <button class="btn btn-ghost" id="ml-export-btn">
+                        📥 Export PDF
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Prévision Globale ── -->
+    <div class="charts-row mb-1">
+        <div class="card chart-card main-forecast">
+            <div class="card-header">
+                <span class="card-title">📈 Prévision des Revenus</span>
+                <div class="loader-sm" id="prediction-loader" style="display:none;"></div>
+            </div>
+            <div class="card-body">
+                <canvas id="forecastChart" height="250"></canvas>
+            </div>
+        </div>
+        
+        <div class="card info-card summary-card">
+            <div class="card-header">
+                <span class="card-title">💡 Résumé IA</span>
+            </div>
+            <div class="card-body" id="prediction-summary">
+                <!-- Chargé par ml.js -->
+                <div class="empty-state">Calcul en cours...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Tendances & Insights ── -->
+    <div class="charts-grid mb-1">
+        <!-- Tendances sociétés -->
+        <div class="card chart-card">
+            <div class="card-header">
+                <span class="card-title">🏭 Tendances par Famille</span>
+                <div class="loader-sm" id="trends-loader" style="display:none;"></div>
+            </div>
+            <div class="card-body">
+                <canvas id="trendChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Produits stars -->
+        <div class="card chart-card">
+            <div class="card-header">
+                <span class="card-title">🥇 Produits Stars (Prévision)</span>
+                <div class="loader-sm" id="products-loader" style="display:none;"></div>
+            </div>
+            <div class="card-body">
+                <canvas id="productChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Insights IA & Risques ── -->
+    <div class="insights-grid mb-1">
+        <div class="card insight-card">
+            <div class="insight-icon">📅</div>
+            <div class="insight-content">
+                <div class="insight-label">Meilleur jour attendu</div>
+                <div class="insight-value" id="insight-best-day">—</div>
+            </div>
+        </div>
+        <div class="card insight-card">
+            <div class="insight-icon">📈</div>
+            <div class="insight-content">
+                <div class="insight-label">Croissance prévue</div>
+                <div class="insight-value" id="insight-growth">—</div>
+            </div>
+        </div>
+        <div class="card insight-card">
+            <div class="insight-icon">⚠️</div>
+            <div class="insight-content">
+                <div class="insight-label">Alerte Risques</div>
+                <div class="insight-value" id="insight-risk">—</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Tableaux de Prévisions ── -->
+    <div class="charts-row">
+        <!-- Recommandations Stock -->
+        <div class="card flex-2">
+            <div class="card-header">
+                <span class="card-title">📦 Recommandations de Réapprovisionnement</span>
+            </div>
+            <div class="card-body" id="stock-advice">
+                <!-- Chargé par ml.js -->
+            </div>
+        </div>
+
+        <!-- Détail semaine prochaine -->
+        <div class="card flex-1">
+            <div class="card-header">
+                <span class="card-title">📅 Prévision Semaine Prochaine</span>
+            </div>
+            <div class="card-body p0">
+                <table class="data-table" id="next-week-table">
+                    <thead>
+                        <tr>
+                            <th>Jour</th>
+                            <th>Revenu Est.</th>
+                            <th>Rec.</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Tableau des tendances ── -->
+    <div class="card mt-1">
+        <div class="card-header">
+            <span class="card-title">📊 Analyse Comparative des Familles</span>
+        </div>
+        <div class="card-body p0">
+            <table class="data-table" id="trends-table">
+                <thead>
+                    <tr>
+                        <th>Famille</th>
+                        <th>Moy. Hebdo</th>
+                        <th>Variation</th>
+                        <th>Prévision</th>
+                        <th>État</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+<script src="{{ url_for('static', filename='js/ml.js') }}"></script>
+{% endblock %}

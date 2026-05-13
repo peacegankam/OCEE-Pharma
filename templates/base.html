@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}OCEE PHARMA - Dashboard{% endblock %}</title>
+
+    <!-- Polices Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Styles CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    
+    <!-- Chart.js Library -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+    
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <div class="main-wrapper">
+        <!-- SIDEBAR -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <span class="logo-icon">💊</span>
+                    <span class="logo-text">OCEE PHARMA</span>
+                </div>
+                <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Toggle sidebar">
+                    <span class="toggle-icon">◀</span>
+                </button>
+            </div>
+
+            <nav class="sidebar-nav">
+                <ul>
+                    <li>
+                        <a href="{{ url_for('index') }}" class="nav-item {% if request.path == url_for('index') %}active{% endif %}">
+                            <span class="nav-icon">📊</span>
+                            <span class="nav-text">Tableau de bord</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="{{ url_for('caisse_page') }}" class="nav-item {% if request.path == url_for('caisse_page') %}active{% endif %}">
+                            <span class="nav-icon">🛒</span>
+                            <span class="nav-text">Caisse</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="{{ url_for('stocks_page') }}" class="nav-item {% if request.path == url_for('stocks_page') %}active{% endif %}">
+                            <span class="nav-icon">📦</span>
+                            <span class="nav-text">Stocks</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="{{ url_for('produits_page') }}" class="nav-item {% if request.path == url_for('produits_page') %}active{% endif %}">
+                            <span class="nav-icon">💊</span>
+                            <span class="nav-text">Produits</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="{{ url_for('appro_page') }}" class="nav-item {% if request.path == url_for('appro_page') %}active{% endif %}">
+                            <span class="nav-icon">🚚</span>
+                            <span class="nav-text">Approvisionnement</span>
+                        </a>
+                    </li>
+                    {% if session.get('role') == 'admin' %}
+                    <li>
+                        <a href="{{ url_for('rapport_page') }}" class="nav-item {% if request.path == url_for('rapport_page') %}active{% endif %}">
+                            <span class="nav-icon">📄</span>
+                            <span class="nav-text">Rapport Journalier</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="{{ url_for('bilan_page') }}" class="nav-item {% if request.path == url_for('bilan_page') %}active{% endif %}">
+                            <span class="nav-icon">📈</span>
+                            <span class="nav-text">Bilan Hebdo</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="{{ url_for('admin.employes_page') }}" class="nav-item {% if request.path == url_for('admin.employes_page') %}active{% endif %}">
+                            <span class="nav-icon">👥</span>
+                            <span class="nav-text">Personnel</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="{{ url_for('admin.parametres_page') }}" class="nav-item {% if request.path == url_for('admin.parametres_page') %}active{% endif %}">
+                            <span class="nav-icon">⚙️</span>
+                            <span class="nav-text">Paramètres</span>
+                        </a>
+                    </li>
+                    {% endif %}
+                    <li>
+                        <a href="{{ url_for('tendances_page') }}" class="nav-item {% if request.path == url_for('tendances_page') %}active{% endif %}">
+                            <span class="nav-icon">🚀</span>
+                            <span class="nav-text">Tendances ML</span>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="clock">
+                    <div class="clock-time" id="clock-time">00:00:00</div>
+                    <div class="clock-date" id="clock-date">Lundi 1 Janvier</div>
+                </div>
+                <a href="{{ url_for('logout') }}" class="nav-item mt-1 text-red">
+                    <span class="nav-icon">🚪</span>
+                    <span class="nav-text">Déconnexion</span>
+                </a>
+            </div>
+        </aside>
+
+        <!-- MAIN CONTENT -->
+        <main class="main-content">
+            <header class="top-bar">
+                <div class="page-title">
+                    <h1>{% block page_title %}Tableau de bord{% endblock %}</h1>
+                </div>
+                <div class="top-bar-actions">
+                    <div class="user-info">
+                        <span class="user-name">{{ session.get('nom', 'Utilisateur') }}</span>
+                        <span class="user-role badge {% if session.get('role') == 'admin' %}badge-sabc{% else %}badge-guinness{% endif %}">
+                            {{ session.get('role', 'vendeur') }}
+                        </span>
+                    </div>
+                    <button class="btn-refresh" onclick="location.reload()">⟳</button>
+                </div>
+            </header>
+
+            <div class="content">
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+    </div>
+
+    <!-- Notification Toast -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <!-- Scripts globaux -->
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+    <script>
+        // Initialisation globale légère
+        document.addEventListener('DOMContentLoaded', function () {
+            console.log('OCEE PHARMA - Initialisation');
+            
+            // Gestion de la sidebar toggle
+            const sidebar = document.getElementById('sidebar');
+            const toggle = document.getElementById('sidebar-toggle');
+            
+            if (toggle && sidebar) {
+                toggle.addEventListener('click', () => {
+                    sidebar.classList.toggle('collapsed');
+                    toggle.querySelector('.toggle-icon').textContent = sidebar.classList.contains('collapsed') ? '▶' : '◀';
+                });
+            }
+
+            // Horloge
+            actualiserHorloge();
+            setInterval(actualiserHorloge, 1000);
+        });
+
+        function actualiserHorloge() {
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            const dateStr = now.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+            
+            const timeEl = document.getElementById('clock-time');
+            const dateEl = document.getElementById('clock-date');
+            
+            if (timeEl) timeEl.textContent = timeStr;
+            if (dateEl) dateEl.textContent = dateStr.charAt(0).toUpperCase() + dateStr.slice(1);
+        }
+
+        // Notification System
+        function afficherNotif(msg, type = 'info') {
+            const container = document.getElementById('toast-container');
+            if (!container) return;
+
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            
+            const icon = type === 'success' ? '✅' : type === 'error' ? '❌' : type === 'warning' ? '⚠️' : 'ℹ️';
+            
+            toast.innerHTML = `<span>${icon}</span> <span>${msg}</span>`;
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateX(100%)';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // Formateur FCFA
+        function formaterFCFA(montant) {
+            return new Intl.NumberFormat('fr-FR').format(montant) + ' FCFA';
+        }
+
+        // Badge société
+        function badgeSociete(societe) {
+            if (!societe) return '';
+            const slug = societe.toLowerCase().replace(/ /g, '-');
+            return `<span class="badge badge-${slug}">${societe}</span>`;
+        }
+    </script>
+    
+    {% block scripts %}{% endblock %}
+</body>
+</html>

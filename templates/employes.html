@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+
+{% block title %}Personnel — OCEE PHARMA{% endblock %}
+{% block page_title %}Gestion du Personnel{% endblock %}
+
+{% block content %}
+<div class="page-layout">
+    <!-- ── FORMULAIRE NOUVEL EMPLOYÉ ── -->
+    <div class="sidebar-form">
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">👤 Ajouter un Compte</span>
+            </div>
+            <div class="card-body">
+                <form id="form-employe">
+                    <div class="form-group">
+                        <label>Nom complet</label>
+                        <input type="text" id="emp-nom" name="nom" required placeholder="ex: Jean Dupont" />
+                    </div>
+                    <div class="form-group">
+                        <label>Rôle</label>
+                        <select id="emp-role" name="role">
+                            <option value="vendeur">Vendeur</option>
+                            <option value="admin">Administrateur</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Code PIN (pour admin)</label>
+                        <input type="password" id="emp-pin" name="code_pin" maxlength="4" placeholder="Optionnel pour vendeur" />
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-full">
+                        Créer le Compte
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card mt-1">
+            <div class="card-header">
+                <span class="card-title">💡 Info</span>
+            </div>
+            <div class="card-body">
+                <p class="text-sm text-muted">
+                    Les administrateurs ont besoin d'un PIN pour se connecter. Les vendeurs n'en ont pas besoin par défaut.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── LISTE DES UTILISATEURS ── -->
+    <div class="main-panel">
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">👥 Comptes Utilisateurs</span>
+            </div>
+            <div class="card-body p0">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Nom</th>
+                            <th>Rôle</th>
+                            <th>Ventes</th>
+                            <th>C.A. Généré</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for user in utilisateurs %}
+                        <tr>
+                            <td class="bold">{{ user.nom }}</td>
+                            <td>
+                                <span class="badge {% if user.role == 'admin' %}badge-sabc{% else %}badge-guinness{% endif %}">
+                                    {{ user.role|upper }}
+                                </span>
+                            </td>
+                            <td>{{ user.nb_ventes }}</td>
+                            <td class="bold text-green">{{ user.total_vendu|int }} FCFA</td>
+                            <td>
+                                <button class="btn btn-ghost btn-sm text-red btn-delete-user" data-id="{{ user.id }}" data-nom="{{ user.nom }}">
+                                    🗑️
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.getElementById('form-employe').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const data = {
+            nom: document.getElementById('emp-nom').value,
+            role: document.getElementById('emp-role').value,
+            code_pin: document.getElementById('emp-pin').value
+        };
+
+        fetch('/admin/api/employes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        })
+        .then(r => r.json())
+        .then(res => {
+            if (res.success) {
+                afficherNotif('Compte créé avec succès', 'success');
+                location.reload();
+            } else {
+                afficherNotif(res.message, 'error');
+            }
+        });
+    });
+
+    // Gestion de la suppression via delegation
+    document.addEventListener('click', function(e) {
+        const btn = e.target.closest('.btn-delete-user');
+        if (!btn) return;
+        
+        const id = btn.dataset.id;
+        const nom = btn.dataset.nom;
+        
+        alert("Clic sur suppression de : " + nom);
+        
+        console.log("Suppression demandée pour:", id, nom);
+        if (!confirm(`Supprimer le compte de ${nom} ?`)) {
+            console.log("Suppression annulée par l'utilisateur");
+            return;
+        }
+        
+        // alert("Envoi de la requête DELETE à /admin/api/employes/" + id);
+        fetch(`/admin/api/employes/${id}`, { method: 'DELETE' })
+        .then(r => {
+            if (!r.ok) {
+                alert("Erreur serveur : " + r.status);
+                throw new Error("Erreur serveur " + r.status);
+            }
+            return r.json();
+        })
+        .then(res => {
+            if (res.success) {
+                alert('Compte supprimé avec succès !');
+                location.reload();
+            } else {
+                alert("Échec : " + res.message);
+            }
+        })
+        .catch(err => {
+            alert("Erreur de connexion : " + err.message);
+        });
+    });
+</script>
+{% endblock %}

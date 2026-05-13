@@ -1,0 +1,279 @@
+{% extends "base.html" %}
+
+{% block title %}Rapport Journalier — OCEE PHARMA{% endblock %}
+{% block page_title %}Rapport Journalier{% endblock %}
+
+{% block content %}
+
+<!-- ── Sélecteur de date ── -->
+<div class="card mb-1">
+    <div class="card-body">
+        <div class="controls-row">
+            <div class="control-group">
+                <label>Date du rapport</label>
+                <input type="date" id="rapport-date" />
+            </div>
+            <div class="control-group align-bottom">
+                <div class="btn-group">
+                    <button class="btn btn-ghost btn-sm" onclick="setDateRapport('today')">Aujourd'hui</button>
+                    <button class="btn btn-ghost btn-sm" onclick="setDateRapport('yesterday')">Hier</button>
+                </div>
+            </div>
+            <div class="control-group align-bottom">
+                <button class="btn btn-primary" onclick="genererRapport()">
+                     Générer le Rapport
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Contenu du rapport ── -->
+<div id="rapport-content" style="display:none;">
+
+    <!-- En-tête rapport -->
+    <div class="rapport-header">
+        <div class="rapport-titre">
+            <span class="rapport-icon">📄</span>
+            <div>
+                <div class="rapport-date-label" id="rapport-date-label">—</div>
+                <div class="rapport-sub">Bilan de fin de journée — Pharmacien</div>
+            </div>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="telechargerPDF()">
+            📥 Télécharger PDF
+        </button>
+        <button class="btn btn-ghost btn-sm" onclick="window.print()">
+            🖨️ Imprimer
+        </button>
+    </div>
+
+    <!-- KPIs financiers du jour -->
+    <div class="rapport-kpis">
+
+        <div class="rapport-kpi rapport-kpi-green">
+            <div class="rapport-kpi-icon">💰</div>
+            <div class="rapport-kpi-val" id="rapport-revenus">— FCFA</div>
+            <div class="rapport-kpi-label">Revenus encaissés</div>
+            <div class="rapport-kpi-sub">Total des ventes du jour</div>
+        </div>
+
+        <div class="rapport-kpi rapport-kpi-red">
+            <div class="rapport-kpi-icon">📦</div>
+            <div class="rapport-kpi-val" id="rapport-cout-produits">— FCFA</div>
+            <div class="rapport-kpi-label">Coût produits vendus</div>
+            <div class="rapport-kpi-sub">Prix d'achat × quantités</div>
+        </div>
+
+        <div class="rapport-kpi rapport-kpi-orange">
+            <div class="rapport-kpi-icon">🚚</div>
+            <div class="rapport-kpi-val" id="rapport-depenses-appro">— FCFA</div>
+            <div class="rapport-kpi-label">Dépenses livraisons</div>
+            <div class="rapport-kpi-sub">Approvisionnements du jour</div>
+        </div>
+
+        <div class="rapport-kpi rapport-kpi-blue">
+            <div class="rapport-kpi-icon">📈</div>
+            <div class="rapport-kpi-val" id="rapport-benefice">— FCFA</div>
+            <div class="rapport-kpi-label">Bénéfice brut</div>
+            <div class="rapport-kpi-sub">Revenus − Coût produits</div>
+        </div>
+
+    </div>
+
+    <!-- Solde net mis en évidence -->
+    <div class="solde-banner" id="solde-banner">
+        <div class="solde-label">💼 Somme attendue en caisse ce soir</div>
+        <div class="solde-formule">
+            <span id="solde-revenus-f">—</span>
+            <span class="solde-op"> − </span>
+            <span id="solde-depenses-f">—</span>
+            <span class="solde-op"> = </span>
+            <span class="solde-result" id="solde-net">— FCFA</span>
+        </div>
+        <div class="solde-sub">Revenus encaissés − Dépenses livraisons du jour</div>
+    </div>
+
+    <!-- Ventes détaillées -->
+    <div class="card mb-1">
+        <div class="card-header">
+            <span class="card-title">🧾 Détail des Ventes</span>
+            <span class="card-badge" id="rapport-nb-ventes">0 ventes</span>
+        </div>
+        <div class="card-body p0">
+            <table class="data-table" id="table-rapport-ventes">
+                <thead>
+                    <tr>
+                        <th>Heure</th>
+                        <th>Produit</th>
+                        <th>Société</th>
+                        <th>Qté</th>
+                        <th>Prix Unit.</th>
+                        <th>Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td colspan="6" class="table-empty">Aucune vente ce jour</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="table-footer">
+            <div class="table-total">
+                <span>Total des ventes</span>
+                <span class="total-value" id="rapport-total-ventes">0 FCFA</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Approvisionnements du jour -->
+    <div class="card mb-1">
+        <div class="card-header">
+            <span class="card-title">🚚 Livraisons du Jour</span>
+            <span class="card-badge" id="rapport-nb-appros">0 livraison(s)</span>
+        </div>
+        <div class="card-body p0">
+            <table class="data-table" id="table-rapport-appro">
+                <thead>
+                    <tr>
+                        <th>Heure</th>
+                        <th>Produit</th>
+                        <th>Société</th>
+                        <th>Qté Reçue</th>
+                        <th>Coût Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td colspan="5" class="table-empty">Aucune livraison ce jour</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Ventes par société (résumé) -->
+    <div class="card mb-1">
+        <div class="card-header">
+            <span class="card-title">🏭 Ventes par Société</span>
+        </div>
+        <div class="card-body p0">
+            <table class="data-table" id="table-rapport-societes">
+                <thead>
+                    <tr>
+                        <th>Société</th>
+                        <th>Nb Ventes</th>
+                        <th>Qté Totale</th>
+                        <th>Revenus</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+<!-- État vide -->
+<div class="empty-state" id="rapport-empty" style="display:none;">
+    <div class="empty-icon">📄</div>
+    <div class="empty-title">Aucune activité ce jour</div>
+    <div class="empty-sub">Sélectionne une autre date ou enregistre des ventes dans la Caisse.</div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        setDateRapport('today');
+    });
+
+    function setDateRapport(quand) {
+        const d = new Date();
+        if (quand === 'yesterday') d.setDate(d.getDate() - 1);
+        document.getElementById('rapport-date').value = d.toISOString().slice(0, 10);
+    }
+
+    function genererRapport() {
+        const date = document.getElementById('rapport-date').value;
+        if (!date) { afficherNotif('Sélectionne une date', 'warning'); return; }
+
+        fetch(`/api/rapports/journalier-json?date=${date}`)
+            .then(r => r.json())
+            .then(data => {
+                if (!data.success) { afficherNotif('Erreur génération rapport', 'error'); return; }
+                afficherRapport(data);
+            });
+    }
+
+    function afficherRapport(d) {
+        const vide = !d.nb_ventes;
+        document.getElementById('rapport-content').style.display = vide ? 'none' : 'block';
+        document.getElementById('rapport-empty').style.display = vide ? 'flex' : 'none';
+        if (vide) return;
+
+        // En-tête
+        const dt = new Date(d.date + 'T00:00:00');
+        document.getElementById('rapport-date-label').textContent =
+            dt.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+        // KPIs
+        document.getElementById('rapport-revenus').textContent = formaterFCFA(d.revenus);
+        document.getElementById('rapport-cout-produits').textContent = formaterFCFA(d.cout_produits);
+        document.getElementById('rapport-depenses-appro').textContent = formaterFCFA(d.depenses_appro);
+        document.getElementById('rapport-benefice').textContent = formaterFCFA(d.benefice);
+
+        // Solde net
+        const solde = d.revenus - d.depenses_appro;
+        document.getElementById('solde-revenus-f').textContent = formaterFCFA(d.revenus);
+        document.getElementById('solde-depenses-f').textContent = formaterFCFA(d.depenses_appro);
+        document.getElementById('solde-net').textContent = formaterFCFA(solde);
+        document.getElementById('solde-net').className =
+            'solde-result ' + (solde >= 0 ? 'positive' : 'negative');
+
+        // Ventes
+        document.getElementById('rapport-nb-ventes').textContent = d.nb_ventes + ' ventes';
+        document.getElementById('rapport-total-ventes').textContent = formaterFCFA(d.revenus);
+        const tbodyV = document.querySelector('#table-rapport-ventes tbody');
+        tbodyV.innerHTML = d.ventes.map(v => `
+      <tr>
+        <td>${v.heure}</td>
+        <td>${v.produit}</td>
+        <td><span class="badge badge-${v.societe.toLowerCase().replace(/ /g, '-')}">${v.societe}</span></td>
+        <td>${v.quantite}</td>
+        <td>${formaterFCFA(v.prix_unitaire)}</td>
+        <td class="bold">${formaterFCFA(v.montant_total)}</td>
+      </tr>`).join('') || '<tr><td colspan="6" class="table-empty">—</td></tr>';
+
+        // Appros
+        document.getElementById('rapport-nb-appros').textContent = d.approvisionnements.length + ' livraison(s)';
+        const tbodyA = document.querySelector('#table-rapport-appro tbody');
+        tbodyA.innerHTML = d.approvisionnements.map(a => `
+      <tr>
+        <td>${a.heure}</td>
+        <td>${a.produit}</td>
+        <td>${a.societe}</td>
+        <td>${a.quantite}</td>
+        <td class="bold">${formaterFCFA(a.cout_total)}</td>
+      </tr>`).join('') || '<tr><td colspan="5" class="table-empty">Aucune livraison</td></tr>';
+
+        // Par société
+        const tbodyS = document.querySelector('#table-rapport-societes tbody');
+        tbodyS.innerHTML = d.par_societe.map(s => `
+      <tr>
+        <td><span class="badge badge-${s.societe.toLowerCase().replace(/ /g, '-')}">${s.societe}</span></td>
+        <td>${s.nb_ventes}</td>
+        <td>${s.qte_totale}</td>
+        <td class="bold">${formaterFCFA(s.revenus)}</td>
+      </tr>`).join('') || '<tr><td colspan="4" class="table-empty">—</td></tr>';
+    }
+
+    function telechargerPDF() {
+        const date = document.getElementById('rapport-date').value;
+        if (!date) return;
+        window.location.href = `/api/rapports/journalier?date=${date}`;
+    }
+</script>
+{% endblock %}

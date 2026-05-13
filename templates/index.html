@@ -1,0 +1,357 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - OCEE PHARMA{% endblock %}
+
+{% block page_title %}Tableau de bord{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <!-- ========== SECTION 1 : KPIS PRINCIPAUX ========== -->
+    <div class="kpi-grid">
+        {% if session.get('role') == 'admin' %}
+        <div class="kpi-card">
+            <div class="kpi-icon">💰</div>
+            <div class="kpi-content">
+                <div class="kpi-title">Revenus du jour</div>
+                <div class="kpi-value" id="kpi-revenus">0 FCFA</div>
+                <div class="kpi-trend positive">+12% vs hier</div>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="kpi-card">
+            <div class="kpi-icon">📊</div>
+            <div class="kpi-content">
+                <div class="kpi-title">Ventes du shift</div>
+                <div class="kpi-value" id="kpi-ventes">0</div>
+                <div class="kpi-trend">articles vendus aujourd'hui</div>
+            </div>
+        </div>
+
+        {% if session.get('role') == 'admin' %}
+        <div class="kpi-card">
+            <div class="kpi-icon">📈</div>
+            <div class="kpi-content">
+                <div class="kpi-title">Bénéfice</div>
+                <div class="kpi-value" id="kpi-benefice">0 FCFA</div>
+                <div class="kpi-trend positive">+8%</div>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="kpi-card">
+            <div class="kpi-icon">⚠️</div>
+            <div class="kpi-content">
+                <div class="kpi-title">Alertes stock</div>
+                <div class="kpi-value" id="kpi-alertes">0</div>
+                <div class="kpi-trend" id="badge-critiques">produits critiques</div>
+            </div>
+        </div>
+    </div>
+
+    {% if session.get('role') == 'admin' %}
+    <!-- ========== SECTION 2 : GRAPHIQUES ========== -->
+    <div class="charts-grid">
+        <!-- Graphique revenus semaine -->
+        <div class="chart-card">
+            <div class="chart-header">
+                <h3>Revenus des 7 derniers jours</h3>
+                <div class="chart-legend">
+                    <span class="legend-dot" style="background: #C1440E;"></span> Revenus
+                </div>
+            </div>
+            <div class="chart-container">
+                <canvas id="chart-revenus-semaine"></canvas>
+                <div class="chart-loader" id="loader-revenus" style="display: none;">Chargement...</div>
+            </div>
+        </div>
+
+        <!-- Graphique top produits -->
+        <div class="chart-card">
+            <div class="chart-header">
+                <h3>Top 5 produits</h3>
+                <div class="chart-legend">
+                    <span class="legend-dot" style="background: #F4A261;"></span> Revenus
+                </div>
+            </div>
+            <div class="chart-container">
+                <canvas id="chart-top-produits"></canvas>
+                <div class="chart-loader" id="loader-top" style="display: none;">Chargement...</div>
+            </div>
+        </div>
+
+        <!-- Graphique répartition sociétés -->
+        <div class="chart-card">
+            <div class="chart-header">
+                <h3>Répartition par société</h3>
+            </div>
+            <div class="chart-container">
+                <canvas id="chart-societes"></canvas>
+                <div class="chart-loader" id="loader-societes" style="display: none;">Chargement...</div>
+            </div>
+        </div>
+
+        <!-- Graphique stocks critiques -->
+        <div class="chart-card">
+            <div class="chart-header">
+                <h3>Stocks les plus bas</h3>
+                <div class="chart-legend">
+                    <span class="legend-dot" style="background: #E63946;"></span> Niveau stock
+                </div>
+            </div>
+            <div class="chart-container">
+                <canvas id="chart-stocks-bas"></canvas>
+                <div class="chart-loader" id="loader-stocks" style="display: none;">Chargement...</div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ========== SECTION 3 : TABLEAU DES STOCKS CRITIQUES ========== -->
+    <div class="table-card">
+        <div class="table-header">
+            <h3>📦 Stocks critiques</h3>
+            <div class="table-actions">
+                <span class="badge-count" id="badge-critiques-header">0 produit(s)</span>
+                <button class="btn-refresh-small" onclick="chargerStocksCritiques()">⟳</button>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="data-table" id="table-stocks-critiques">
+                <thead>
+                    <tr>
+                        <th>Produit</th>
+                        <th>medocs</th>
+                        <th>Stock actuel</th>
+                        <th>Seuil alerte</th>
+                        <th>État</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Les données seront chargées dynamiquement -->
+                    <tr>
+                        <td colspan="5" class="table-loading">Chargement des données...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ========== SECTION 4 : ACTIVITÉ RÉCENTE & IA ========== -->
+    <div class="activity-grid">
+        <!-- Dernières ventes -->
+        <div class="activity-card">
+            <div class="activity-header">
+                <h3>🕒 Dernières ventes</h3>
+                <a href="/caisse" class="btn-link">Voir caisse →</a>
+            </div>
+            <div class="activity-list" id="dernieres-ventes">
+                <div class="activity-item loading">Chargement...</div>
+            </div>
+        </div>
+
+        <!-- Alertes rapides -->
+        <div class="activity-card">
+            <div class="activity-header">
+                <h3>⚠️ Alertes rapides</h3>
+                <a href="/stocks" class="btn-link">Gérer stocks →</a>
+            </div>
+            <div class="alert-list" id="alertes-rapides">
+                <div class="alert-item loading">Chargement...</div>
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Script spécifique à la page index
+    document.addEventListener('DOMContentLoaded', function () {
+        console.log("📊 Page dashboard chargée");
+
+        // Charger les graphiques
+        if (typeof chargerRevenusSemaine === 'function') {
+            chargerRevenusSemaine();
+            chargerTopProduits();
+            chargerRepartitionSocietes();
+            chargerGraphStocksBas();
+        } else {
+            console.error("❌ Fonctions charts.js non disponibles");
+        }
+
+        // Charger l'activité récente
+        chargerActiviteRecente();
+    });
+
+    function chargerActiviteRecente() {
+        fetch('/api/dashboard/ventes-recentes')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.ventes) {
+                    afficherDernieresVentes(data.ventes);
+                } else {
+                    // Données de démonstration
+                    afficherDernieresVentesDemo();
+                }
+            })
+            .catch(() => afficherDernieresVentesDemo());
+
+        // Alertes ruptures/stock bas
+        const fetchStocks = fetch('/api/dashboard/stocks-critiques')
+            .then(response => response.json());
+
+        // Alertes péremption
+        const fetchPeremptions = fetch('/api/dashboard/peremptions-critiques')
+            .then(response => response.json());
+
+        Promise.all([fetchStocks, fetchPeremptions])
+            .then(([stocksData, perData]) => {
+                const stocks = (stocksData && stocksData.success && stocksData.stocks) ? stocksData.stocks : [];
+                const peremptions = (perData && perData.success && perData.produits) ? perData.produits : [];
+
+                // Normaliser les objets pour réutiliser afficherAlertesRapides
+                const perAsStocks = peremptions.map(p => ({
+                    nom: p.nom,
+                    societe: p.societe,
+                    quantite: p.quantite,
+                    seuil_alerte: p.seuil_alerte,
+                    niveau: p.niveau,
+                    date_peremption: p.date_peremption,
+                    jours_restants: p.jours_restants
+                }));
+
+                const merged = [...stocks, ...perAsStocks];
+                if (merged.length > 0) {
+                    afficherAlertesRapides(merged);
+                } else {
+                    afficherAlertesRapidesDemo();
+                }
+            })
+            .catch(() => afficherAlertesRapidesDemo());
+    }
+
+    function afficherDernieresVentes(ventes) {
+        const container = document.getElementById('dernieres-ventes');
+        if (!container) return;
+
+        if (!ventes || ventes.length === 0) {
+            container.innerHTML = '<div class="activity-item empty">Aucune vente récente</div>';
+            return;
+        }
+
+        container.innerHTML = ventes.slice(0, 5).map(v => {
+            const date = new Date(v.date_vente);
+            const heure = date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+            return `
+                <div class="activity-item">
+                    <div class="activity-icon">💊</div>
+                    <div class="activity-details">
+                        <div class="activity-title">${v.produit}</div>
+                        <div class="activity-meta">${heure} · ${v.quantite} article(s)</div>
+                    </div>
+                    <div class="activity-amount">${formaterFCFA(v.total)}</div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    function afficherDernieresVentesDemo() {
+        const container = document.getElementById('dernieres-ventes');
+        if (!container) return;
+
+        container.innerHTML = `
+            <div class="activity-item">
+                <div class="activity-icon">💊</div>
+                <div class="activity-details">
+                    <div class="activity-title">Amoxicilline 500mg</div>
+                    <div class="activity-meta">15:30 · 1 articles</div>
+                </div>
+                <div class="activity-amount">2 500 FCFA</div>
+            </div>
+            <div class="activity-item">
+                <div class="activity-icon">💊</div>
+                <div class="activity-details">
+                    <div class="activity-title">Paracétamol 500mg</div>
+                    <div class="activity-meta">15:15 · 5 articles</div>
+                </div>
+                <div class="activity-amount">2 500 FCFA</div>
+            </div>
+            <div class="activity-item">
+                <div class="activity-icon">💊</div>
+                <div class="activity-details">
+                    <div class="activity-title">Vitamine C 1000mg</div>
+                    <div class="activity-meta">14:50 · 2 articles</div>
+                </div>
+                <div class="activity-amount">5 600 FCFA</div>
+            </div>
+        `;
+    }
+
+    function afficherAlertesRapides(stocks) {
+        const container = document.getElementById('alertes-rapides');
+        if (!container) return;
+
+        if (!stocks || stocks.length === 0) {
+            container.innerHTML = '<div class="alert-item success">✅ Aucune alerte critique</div>';
+            return;
+        }
+
+        container.innerHTML = stocks.slice(0, 6).map(s => {
+            // Si c'est une alerte de péremption, on utilise le champ niveau
+            const isPeremption = (s.date_peremption || s.jours_restants !== undefined);
+            let niveau = s.niveau;
+
+            if (!niveau) {
+                niveau = s.quantite === 0 ? 'critique' :
+                    s.quantite <= s.seuil_alerte / 2 ? 'critique' : 'faible';
+            }
+
+            const meta = isPeremption
+                ? `Péremption: ${s.date_peremption} (${s.jours_restants}j restants)`
+                : `Stock: ${s.quantite} / Seuil: ${s.seuil_alerte}`;
+
+            return `
+                <div class="alert-item ${niveau}">
+                    <div class="alert-icon">${niveau === 'critique' ? '🔴' : '⚠️'}</div>
+                    <div class="alert-content">
+                        <div class="alert-title">${s.nom}</div>
+                        <div class="alert-meta">${meta}</div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    function afficherAlertesRapidesDemo() {
+        const container = document.getElementById('alertes-rapides');
+        if (!container) return;
+
+        container.innerHTML = `
+            <div class="alert-item critique">
+                <div class="alert-icon">🔴</div>
+                <div class="alert-content">
+                    <div class="alert-title">Amoxicilline 500mg</div>
+                    <div class="alert-meta">Stock: 2 / Seuil: 20</div>
+                </div>
+            </div>
+            <div class="alert-item critique">
+                <div class="alert-icon">🔴</div>
+                <div class="alert-content">
+                    <div class="alert-title">Tensiomètre Brassard</div>
+                    <div class="alert-meta">Stock: 1 / Seuil: 5</div>
+                </div>
+            </div>
+            <div class="alert-item faible">
+                <div class="alert-icon">⚠️</div>
+                <div class="alert-content">
+                    <div class="alert-title">Ibuprofène 400mg</div>
+                    <div class="alert-meta">Stock: 10 / Seuil: 30</div>
+                </div>
+            </div>
+        `;
+    }
+</script>
+{% endblock %}

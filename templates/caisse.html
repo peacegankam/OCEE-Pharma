@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block title %}Caisse - OCEE PHARMA{% endblock %}
+{% block page_title %}Caisse de Vente{% endblock %}
+
+{% block content %}
+<div class="page-layout">
+    <!-- ── FORMULAIRE DE VENTE ── -->
+    <div class="sidebar-form">
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">🛒 Nouvelle Vente</span>
+            </div>
+            <div class="card-body">
+                <form id="form-vente" autocomplete="off">
+                    <div class="form-group">
+                        <label>Filtrer par société</label>
+                        <select id="vente-societe-filtre" onchange="filtrerProduitsVente()">
+                            <option value="">Toutes</option>
+                            <option value="Antibiotiques">Antibiotiques</option>
+                            <option value="Analgésiques">Analgésiques</option>
+                            <option value="Vitamines">Vitamines</option>
+                            <option value="Dermatologie">Dermatologie</option>
+                            <option value="Matériel Médical">Matériel Médical</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="vente-produit">Produit</label>
+                        <select id="vente-produit" name="produit_id" required onchange="mettreAJourPrixVente()">
+                            <option value="">— Sélectionner un produit —</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="vente-quantite">Quantité</label>
+                        <div class="qty-control">
+                            <button type="button" class="qty-btn" onclick="ajusterQte(-1)">−</button>
+                            <input type="number" id="vente-quantite" name="quantite" min="1" value="1" onchange="mettreAJourTotalVente()" />
+                            <button type="button" class="qty-btn" onclick="ajusterQte(1)">+</button>
+                        </div>
+                    </div>
+
+                    <!-- Panel Info Prix -->
+                    <div class="prix-panel" id="prix-panel" style="display:none;">
+                        <div class="prix-ligne">
+                            <span class="prix-label">Prix unitaire</span>
+                            <span class="prix-val" id="prix-unitaire">0 FCFA</span>
+                        </div>
+                        <div class="prix-ligne">
+                            <span class="prix-label">Stock disponible</span>
+                            <span class="prix-val" id="stock-dispo">0</span>
+                        </div>
+                        <div class="total-ligne">
+                            <span class="total-label">Total à payer</span>
+                            <span class="total-val" id="total-vente">0 FCFA</span>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-full btn-lg mt-1">
+                        💳 Encaisser la Vente
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- KPIs Caisse Rapides -->
+        <div class="kpi-grid-mini mt-1">
+            <div class="card kpi-card-mini">
+                <div class="kpi-mini-val" id="caisse-total">0 FCFA</div>
+                <div class="kpi-mini-label">Total Jour</div>
+            </div>
+            <div class="card kpi-card-mini">
+                <div class="kpi-mini-val" id="caisse-nb">0</div>
+                <div class="kpi-mini-label">Ventes</div>
+            </div>
+            <div class="card kpi-card-mini">
+                <div class="kpi-mini-val" id="caisse-benefice">0 FCFA</div>
+                <div class="kpi-mini-label">Bénéfice</div>
+            </div>
+        </div>
+        
+        <button class="btn btn-ghost btn-full mt-1 text-red" onclick="annulerDerniereVente()">
+            ↩️ Annuler dernière vente
+        </button>
+    </div>
+
+    <!-- ── LISTE DES VENTES DU JOUR ── -->
+    <div class="main-panel">
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">🧾 Ventes de la journée</span>
+            </div>
+            <div class="card-body p0">
+                <table class="data-table" id="table-ventes-jour">
+                    <thead>
+                        <tr>
+                            <th>Heure</th>
+                            <th>Produit</th>
+                            <th>Société</th>
+                            <th>Qté</th>
+                            <th>Prix Unit.</th>
+                            <th>Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td colspan="6" class="empty-table">Chargement...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="table-footer">
+                <div class="table-total">
+                    <span>Total encaissé aujourd'hui</span>
+                    <span class="total-value" id="table-total-encaisse">0 FCFA</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/caisse.js') }}"></script>
+{% endblock %}

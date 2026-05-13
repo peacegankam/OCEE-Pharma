@@ -1,0 +1,274 @@
+{% extends "base.html" %}
+
+{% block title %}Produits — OCEE PHARMA{% endblock %}
+{% block page_title %}Gestion des Produits{% endblock %}
+
+{% block content %}
+
+<div class="page-layout">
+
+    <!-- ── Sidebar Formulaire ── -->
+    <div class="sidebar-form">
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title" id="form-produit-titre">📦 Nouveau Produit</span>
+            </div>
+            <div class="card-body">
+                <form id="form-produit">
+                    <input type="hidden" id="produit-id" name="id" />
+                    
+                    <div class="form-group">
+                        <label for="produit-nom">Nom du médicament</label>
+                        <select id="produit-nom" name="nom" required>
+                            <option value="">— Sélectionner un produit —</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="produit-societe">Société / Famille</label>
+                        <select id="produit-societe" name="societe" required onchange="chargerProduitsParSociete()">
+                            <option value="">— Sélectionner —</option>
+                            <option value="Antibiotiques">Antibiotiques</option>
+                            <option value="Analgésiques">Analgésiques</option>
+                            <option value="Vitamines">Vitamines</option>
+                            <option value="Dermatologie">Dermatologie</option>
+                            <option value="Matériel Médical">Matériel Médical</option>
+                        </select>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="produit-prix-achat">Prix Achat (unit)</label>
+                            <input type="number" id="produit-prix-achat" name="prix_achat" min="0" value="0" />
+                        </div>
+                        <div class="form-group">
+                            <label for="produit-prix-vente">Prix Vente (unit)</label>
+                            <input type="number" id="produit-prix-vente" name="prix_vente" min="0" required />
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="produit-stock">Stock Initial</label>
+                            <input type="number" id="produit-stock" name="stock_actuel" min="0" value="0" />
+                        </div>
+                        <div class="form-group">
+                            <label for="produit-seuil">Seuil Alerte</label>
+                            <input type="number" id="produit-seuil" name="seuil_alerte" min="1" value="10" />
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="produit-peremption">Date de péremption</label>
+                        <input type="date" id="produit-peremption" name="date_peremption" />
+                    </div>
+
+                    <div class="form-actions mt-1">
+                        <button type="submit" class="btn btn-primary btn-full" id="btn-save-produit">
+                            Enregistrer le Produit
+                        </button>
+                        <button type="button" class="btn btn-ghost btn-full mt-05" onclick="resetFormProduit()" id="btn-cancel-edit" style="display:none;">
+                            Annuler l'édition
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Liste des Produits ── -->
+    <div class="main-panel">
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">📋 Inventaire Complet</span>
+                <div class="header-actions">
+                    <input type="text" id="search-produit" placeholder="Rechercher un produit..." oninput="filtrerTableProduits()" class="input-sm" />
+                </div>
+            </div>
+            <div class="card-body p0">
+                <table class="data-table" id="table-produits">
+                    <thead>
+                        <tr>
+                            <th>Nom</th>
+                            <th>Société</th>
+                            <th>Prix Vente</th>
+                            <th>Stock</th>
+                            <th>Péremption</th>
+                            <th>Alerte</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Chargement... -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Stockage de tous les produits pour filtrage
+    let tousProduits = [];
+
+    document.addEventListener('DOMContentLoaded', () => {
+        chargerProduits();
+        chargerTousProduits(); // Charger tous les produits au démarrage
+        document.getElementById('form-produit').addEventListener('submit', soumettreProduit);
+    });
+
+    // Charger tous les produits et les stocker
+    async function chargerTousProduits() {
+        try {
+            const res = await fetch('/api/produits/?with_stock=true');
+            const data = await res.json();
+            if (data.success) {
+                tousProduits = data.produits;
+            }
+        } catch (error) {
+            console.error('Erreur chargement produits:', error);
+        }
+    }
+
+    // Charger les produits d'une société sélectionnée
+    function chargerProduitsParSociete() {
+        const societe = document.getElementById('produit-societe').value;
+        const selectNom = document.getElementById('produit-nom');
+        
+        if (!societe) {
+            selectNom.innerHTML = '<option value="">— Sélectionner un produit —</option>';
+            return;
+        }
+
+        // Filtrer les produits de la société sélectionnée
+        const produitsSociete = tousProduits.filter(p => p.societe === societe);
+        
+        if (produitsSociete.length === 0) {
+            selectNom.innerHTML = '<option value="">Aucun produit pour cette société</option>';
+            return;
+        }
+
+        // Remplir le select avec les produits
+        selectNom.innerHTML = '<option value="">— Sélectionner un produit —</option>' +
+            produitsSociete.map(p => `<option value="${p.nom}">${p.nom} (Stock: ${p.stock_actuel})</option>`).join('');
+    }
+
+    async function chargerProduits() {
+        const res = await fetch('/api/produits/');
+        const data = await res.json();
+        if (data.success) {
+            afficherTableProduits(data.produits);
+        }
+    }
+
+    function afficherTableProduits(produits) {
+        const tbody = document.querySelector('#table-produits tbody');
+        tbody.innerHTML = produits.map(p => `
+            <tr id="row-prod-${p.id}">
+                <td class="bold">${p.nom}</td>
+                <td>${badgeSociete(p.societe)}</td>
+                <td>${formaterFCFA(p.prix_vente)}</td>
+                <td>
+                    <span class="stock-pill ${p.stock_actuel <= p.seuil_alerte ? 'stock-low' : ''}">
+                        ${p.stock_actuel}
+                    </span>
+                </td>
+                <td>
+                    <span class="badge ${p.jours_restants !== null && p.jours_restants <= 30 ? 'badge-sabc' : 'badge-guinness'}">
+                        ${p.date_peremption || 'N/A'}
+                    </span>
+                </td>
+                <td>${p.seuil_alerte}</td>
+                <td>
+                    <div class="btn-group">
+                        <button class="btn btn-ghost btn-sm" onclick='editerProduit(${JSON.stringify(p)})'>✏️</button>
+                        <button class="btn btn-ghost btn-sm text-red" onclick="supprimerProduit(${p.id})">🗑️</button>
+                    </div>
+                </td>
+            </tr>
+        `).join('') || '<tr><td colspan="7" class="table-empty">Aucun produit trouvé</td></tr>';
+    }
+
+    function soumettreProduit(e) {
+        e.preventDefault();
+        const formData = new FormData(e.target);
+        const data = Object.fromEntries(formData.entries());
+        const id = data.id;
+
+        const url = id ? `/api/produits/${id}` : '/api/produits/';
+        const method = id ? 'PUT' : 'POST';
+
+        fetch(url, {
+            method: method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        })
+        .then(r => r.json())
+        .then(res => {
+            if (res.success) {
+                afficherNotif(id ? 'Produit mis à jour' : 'Produit ajouté', 'success');
+                resetFormProduit();
+                chargerProduits();
+            } else {
+                afficherNotif(res.message, 'error');
+            }
+        });
+    }
+
+    function editerProduit(p) {
+        document.getElementById('produit-id').value = p.id;
+        document.getElementById('produit-societe').value = p.societe;
+        
+        // Charger les produits de la société et sélectionner le produit actuel
+        chargerProduitsParSociete();
+        
+        // Attendre que le select soit rempli et sélectionner le produit
+        setTimeout(() => {
+            document.getElementById('produit-nom').value = p.nom;
+        }, 100);
+        
+        document.getElementById('produit-prix-achat').value = p.prix_achat;
+        document.getElementById('produit-prix-vente').value = p.prix_vente;
+        document.getElementById('produit-stock').value = p.stock_actuel;
+        document.getElementById('produit-seuil').value = p.seuil_alerte;
+        document.getElementById('produit-peremption').value = p.date_peremption || '';
+
+        document.getElementById('form-produit-titre').textContent = '✏️ Modifier Produit';
+        document.getElementById('btn-save-produit').textContent = 'Mettre à jour';
+        document.getElementById('btn-cancel-edit').style.display = 'block';
+    }
+
+    function resetFormProduit() {
+        document.getElementById('form-produit').reset();
+        document.getElementById('produit-id').value = '';
+        document.getElementById('form-produit-titre').textContent = '📦 Nouveau Produit';
+        document.getElementById('btn-save-produit').textContent = 'Enregistrer le Produit';
+        document.getElementById('btn-cancel-edit').style.display = 'none';
+    }
+
+    function supprimerProduit(id) {
+        if (!confirm('Supprimer ce produit ?')) return;
+        fetch(`/api/produits/${id}`, { method: 'DELETE' })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    afficherNotif('Produit supprimé', 'success');
+                    chargerProduits();
+                }
+            });
+    }
+
+    function filtrerTableProduits() {
+        const q = document.getElementById('search-produit').value.toLowerCase();
+        const rows = document.querySelectorAll('#table-produits tbody tr');
+        rows.forEach(row => {
+            const text = row.textContent.toLowerCase();
+            row.style.display = text.includes(q) ? '' : 'none';
+        });
+    }
+</script>
+{% endblock %}

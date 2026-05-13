@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+
+{% block title %}Bilan Hebdo — OCEE PHARMA{% endblock %}
+{% block page_title %}Bilan Hebdomadaire{% endblock %}
+
+{% block content %}
+
+<!-- ── Sélecteur de période ── -->
+<div class="card mb-1">
+    <div class="card-body">
+        <div class="controls-row">
+
+            <div class="control-group">
+                <label>Début de période</label>
+                <input type="date" id="bilan-date-debut" />
+            </div>
+            <div class="control-group">
+                <label>Fin de période</label>
+                <input type="date" id="bilan-date-fin" />
+            </div>
+
+            <!-- Raccourcis rapides -->
+            <div class="control-group align-bottom">
+                <div class="btn-group">
+                    <button class="btn btn-ghost btn-sm" onclick="setPeriode('semaine')">Cette semaine</button>
+                    <button class="btn btn-ghost btn-sm" onclick="setPeriode('semaine-passee')">Semaine passée</button>
+                    <button class="btn btn-ghost btn-sm" onclick="setPeriode('mois')">Ce mois</button>
+                </div>
+            </div>
+
+            <div class="control-group align-bottom" style="display:flex; gap:10px;">
+                <button class="btn btn-primary" onclick="chargerBilan()">
+                    Charger le Bilan
+                </button>
+                <button class="btn btn-ghost" onclick="telechargerPDFBilan()">
+                    📥 PDF
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── KPIs bilan ── -->
+<div class="kpi-grid" id="bilan-kpis" style="display:none;">
+    <div class="kpi-card kpi-orange">
+        <div class="kpi-icon">💰</div>
+        <div class="kpi-body">
+            <div class="kpi-value" id="bilan-revenus">— FCFA</div>
+            <div class="kpi-label">Revenus Totaux</div>
+        </div>
+    </div>
+    <div class="kpi-card kpi-red">
+        <div class="kpi-icon">📦</div>
+        <div class="kpi-body">
+            <div class="kpi-value" id="bilan-couts">— FCFA</div>
+            <div class="kpi-label">Coût des Achats</div>
+        </div>
+    </div>
+    <div class="kpi-card kpi-green">
+        <div class="kpi-icon">📈</div>
+        <div class="kpi-body">
+            <div class="kpi-value" id="bilan-benefice">— FCFA</div>
+            <div class="kpi-label">Bénéfice Brut</div>
+        </div>
+    </div>
+    <div class="kpi-card kpi-blue">
+        <div class="kpi-icon">🧾</div>
+        <div class="kpi-body">
+            <div class="kpi-value" id="bilan-transactions">—</div>
+            <div class="kpi-label">Transactions</div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Graphique évolution ── -->
+<div class="card mb-1" id="bilan-graph-card" style="display:none;">
+    <div class="card-header">
+        <span class="card-title">📈 Évolution des Revenus</span>
+        <span class="card-badge" id="bilan-periode-label">—</span>
+    </div>
+    <div class="card-body">
+        <canvas id="chart-bilan-evolution" height="220"></canvas>
+    </div>
+</div>
+
+<!-- ── Tableaux détaillés ── -->
+<div class="charts-row" id="bilan-tables" style="display:none;">
+
+    <!-- Par société -->
+    <div class="card chart-card">
+        <div class="card-header">
+            <span class="card-title">🏭 Détail par Société</span>
+        </div>
+        <div class="card-body p0">
+            <table class="data-table" id="table-bilan-societe">
+                <thead>
+                    <tr>
+                        <th>Société</th>
+                        <th>Revenus</th>
+                        <th>Qté Vendue</th>
+                        <th>% du Total</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Top produits -->
+    <div class="card chart-card">
+        <div class="card-header">
+            <span class="card-title">🥇 Top Produits de la Période</span>
+        </div>
+        <div class="card-body p0">
+            <table class="data-table" id="table-bilan-produits">
+                <thead>
+                    <tr>
+                        <th>Produit</th>
+                        <th>Société</th>
+                        <th>Qté</th>
+                        <th>Revenus</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+<!-- ── Graphique donut répartition société ── -->
+<div class="card mt-1" id="bilan-donut-card" style="display:none;">
+    <div class="card-header">
+        <span class="card-title">🥧 Répartition des Revenus par Société</span>
+    </div>
+    <div class="card-body" style="display:flex; justify-content:center;">
+        <div style="max-width:400px; width:100%;">
+            <canvas id="chart-bilan-societes" height="300"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- État vide -->
+<div class="empty-state" id="bilan-empty" style="display:none;">
+    <div class="empty-icon">📊</div>
+    <div class="empty-title">Aucune vente sur cette période</div>
+    <div class="empty-sub">Sélectionne une autre période ou enregistre des ventes dans la Caisse.</div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // Période par défaut : semaine en cours
+        setPeriode('semaine');
+    });
+
+    function setPeriode(type) {
+        const aujourd = new Date();
+        let debut, fin;
+        if (type === 'semaine') {
+            debut = new Date(aujourd);
+            debut.setDate(aujourd.getDate() - aujourd.getDay() + 1);
+            fin = aujourd;
+        } else if (type === 'semaine-passee') {
+            fin = new Date(aujourd);
+            fin.setDate(aujourd.getDate() - aujourd.getDay());
+            debut = new Date(fin);
+            debut.setDate(fin.getDate() - 6);
+        } else if (type === 'mois') {
+            debut = new Date(aujourd.getFullYear(), aujourd.getMonth(), 1);
+            fin = aujourd;
+        }
+        document.getElementById('bilan-date-debut').value = debut.toISOString().slice(0, 10);
+        document.getElementById('bilan-date-fin').value = fin.toISOString().slice(0, 10);
+    }
+
+    function chargerBilan() {
+        const debut = document.getElementById('bilan-date-debut').value;
+        const fin = document.getElementById('bilan-date-fin').value;
+        if (!debut || !fin) { afficherNotif('Sélectionne une période', 'warning'); return; }
+
+        fetch(`/api/dashboard/bilan?debut=${debut}&fin=${fin}`)
+            .then(r => r.json())
+            .then(data => {
+                if (!data.success) { afficherNotif('Erreur chargement bilan', 'error'); return; }
+                afficherBilan(data);
+            });
+    }
+
+    function afficherBilan(data) {
+        const vide = !data.revenus || data.revenus === 0;
+        document.getElementById('bilan-empty').style.display = vide ? 'flex' : 'none';
+        document.getElementById('bilan-kpis').style.display = vide ? 'none' : 'grid';
+        document.getElementById('bilan-graph-card').style.display = vide ? 'none' : 'block';
+        document.getElementById('bilan-tables').style.display = vide ? 'none' : 'flex';
+        document.getElementById('bilan-donut-card').style.display = vide ? 'none' : 'block';
+        if (vide) return;
+
+        document.getElementById('bilan-revenus').textContent = formaterFCFA(data.revenus);
+        document.getElementById('bilan-couts').textContent = formaterFCFA(data.couts);
+        document.getElementById('bilan-benefice').textContent = formaterFCFA(data.benefice);
+        document.getElementById('bilan-transactions').textContent = data.nb_transactions + ' ventes';
+        document.getElementById('bilan-periode-label').textContent =
+            document.getElementById('bilan-date-debut').value + '  →  ' +
+            document.getElementById('bilan-date-fin').value;
+
+        dessinerEvolutionBilan(data.evolution_journaliere);
+        afficherTableauSocietes(data.par_societe, data.revenus);
+        afficherTableauProduits(data.top_produits);
+        dessinerDonutBilan(data.par_societe);
+    }
+
+    function afficherTableauSocietes(lignes, totalGeneral) {
+        const tbody = document.querySelector('#table-bilan-societe tbody');
+        tbody.innerHTML = lignes.map(l => `
+      <tr>
+        <td><span class="badge badge-${l.societe.toLowerCase().replace(/ /g, '-')}">${l.societe}</span></td>
+        <td class="bold">${formaterFCFA(l.revenus)}</td>
+        <td>${l.qte}</td>
+        <td>${totalGeneral > 0 ? Math.round(l.revenus / totalGeneral * 100) : 0}%</td>
+      </tr>`).join('') || '<tr><td colspan="4" class="table-empty">—</td></tr>';
+    }
+
+    function afficherTableauProduits(lignes) {
+        const tbody = document.querySelector('#table-bilan-produits tbody');
+        tbody.innerHTML = lignes.map((l, i) => `
+      <tr>
+        <td>${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : ''}  ${l.produit}</td>
+        <td><span class="badge badge-${l.societe.toLowerCase().replace(/ /g, '-')}">${l.societe}</span></td>
+        <td><strong>${l.qte}</strong></td>
+        <td>${formaterFCFA(l.revenus)}</td>
+      </tr>`).join('') || '<tr><td colspan="4" class="table-empty">—</td></tr>';
+    }
+
+    function telechargerPDFBilan() {
+        const debut = document.getElementById('bilan-date-debut').value;
+        const fin = document.getElementById('bilan-date-fin').value;
+        if (!debut || !fin) { afficherNotif('Sélectionne une période', 'warning'); return; }
+        window.location.href = `/api/rapports/bilan?debut=${debut}&fin=${fin}`;
+    }
+</script>
+{% endblock %}

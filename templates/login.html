@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connexion - OCEE PHARMA</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .login-wrapper {
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--bg-dark);
+            padding: 20px;
+        }
+        .login-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 40px;
+            width: 100%;
+            max-width: 500px;
+            box-shadow: 0 15px 50px rgba(0,0,0,0.5);
+            text-align: center;
+        }
+        .login-logo {
+            font-size: 50px;
+            margin-bottom: 10px;
+        }
+        .login-title {
+            font-size: 28px;
+            color: var(--orange);
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+        .profiles-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .profile-btn {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            color: var(--text-light);
+        }
+        .profile-btn:hover {
+            border-color: var(--orange);
+            background: rgba(193, 68, 14, 0.1);
+            transform: translateY(-5px);
+        }
+        .profile-btn.selected {
+            border-color: var(--orange);
+            background: rgba(193, 68, 14, 0.2);
+            box-shadow: 0 0 15px rgba(193, 68, 14, 0.3);
+        }
+        .profile-icon {
+            font-size: 30px;
+        }
+        .profile-name {
+            font-size: 14px;
+            font-weight: 600;
+        }
+        .pin-container {
+            margin-top: 20px;
+            display: none;
+        }
+        .error-msg {
+            background: rgba(230, 57, 70, 0.1);
+            color: var(--red);
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-wrapper">
+        <div class="login-card">
+            <div class="login-logo">💊</div>
+            <h1 class="login-title">Bienvenue chez {{ nom_bar }}</h1>
+            <p style="margin-top: 0px; margin-bottom: 30px; color: var(--text-muted); font-size: 14px;">
+                Votre partenaire santé de confiance
+            </p>
+
+            {% if error %}
+            <div class="error-msg">{{ error }}</div>
+            {% endif %}
+
+            <form action="{{ url_for('login') }}" method="POST" id="login-form">
+                <input type="hidden" name="user_id" id="selected-user-id">
+                
+                <p style="margin-bottom: 20px; color: var(--text-muted);">Sélectionnez votre profil pour continuer</p>
+                
+                <div class="profiles-grid">
+                    {% for user in utilisateurs %}
+                    <div class="profile-btn" onclick="selectProfile('{{ user.id }}', '{{ user.role }}', {{ 'true' if user.code_pin else 'false' }}, this)">
+                        <div class="profile-icon">
+                            {% if user.role == 'admin' %}👨‍💼{% else %}👨‍⚕️{% endif %}
+                        </div>
+                        <div class="profile-name">{{ user.nom }}</div>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <div class="pin-container" id="pin-section">
+                    <div class="form-group">
+                        <label id="pin-label">Code PIN</label>
+                        <input type="password" name="pin" id="pin-input" placeholder="••••" maxlength="4" style="text-align: center; letter-spacing: 10px;">
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-full btn-lg" id="btn-login" style="display: none; margin-top: 20px;">
+                    Se connecter
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function selectProfile(id, role, hasPin, el) {
+            // Unselect others
+            document.querySelectorAll('.profile-btn').forEach(b => b.classList.remove('selected'));
+            // Select this one
+            el.classList.add('selected');
+            // Set hidden field
+            document.getElementById('selected-user-id').value = id;
+            
+            // Show/hide PIN
+            const pinSection = document.getElementById('pin-section');
+            const pinInput = document.getElementById('pin-input');
+            const pinLabel = document.getElementById('pin-label');
+            const btn = document.getElementById('btn-login');
+            
+            if (hasPin) {
+                pinSection.style.display = 'block';
+                pinInput.required = true;
+                pinLabel.innerText = role === 'admin' ? 'Code PIN Admin' : 'Code PIN';
+            } else {
+                pinSection.style.display = 'none';
+                pinInput.required = false;
+                pinInput.value = '';
+            }
+            
+            btn.style.display = 'block';
+        }
+    </script>
+</body>
+</html>

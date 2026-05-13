@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}Paramètres — OCEE PHARMA{% endblock %}
+{% block page_title %}Paramètres du Système{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width: 800px; margin: 0 auto;">
+    <div class="card-header">
+        <span class="card-title">⚙️ Configuration de l'Application</span>
+    </div>
+    <div class="card-body">
+        <form id="form-params">
+            <div class="form-group">
+                <label>Nom de la Pharmacie</label>
+                <input type="text" name="NOM_BAR" value="{{ params.NOM_BAR }}" required />
+            </div>
+
+            <div class="form-group">
+                <label>Devise</label>
+                <input type="text" name="DEVISE" value="{{ params.DEVISE }}" required />
+            </div>
+
+            <div class="form-group">
+                <label>Seuil d'alerte global par défaut</label>
+                <input type="number" name="SEUIL_ALERTE_DEFAUT" value="{{ params.SEUIL_ALERTE_DEFAUT|default('10') }}" />
+            </div>
+
+            <div class="form-group">
+                <label>Message de pied de page des tickets</label>
+                <textarea name="TICKET_FOOTER">{{ params.TICKET_FOOTER|default('Merci de votre confiance !') }}</textarea>
+            </div>
+
+            <div class="form-actions mt-2">
+                <button type="submit" class="btn btn-primary btn-lg">
+                    💾 Enregistrer les modifications
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.getElementById('form-params').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const formData = new FormData(e.target);
+        const data = Object.fromEntries(formData.entries());
+
+        fetch('/admin/api/parametres', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        })
+        .then(r => r.json())
+        .then(res => {
+            if (res.success) {
+                afficherNotif('Paramètres enregistrés. Redémarrage requis pour certains changements.', 'success');
+            } else {
+                afficherNotif(res.message, 'error');
+            }
+        });
+    });
+</script>
+{% endblock %}
