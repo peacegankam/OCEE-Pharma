@@ -25,7 +25,7 @@ def rapport_journalier_json():
         # Ventes du jour
         cursor.execute('''
             SELECT 
-                strftime('%H:%M', v.date_vente) as heure,
+                strftime('%H:%M', REPLACE(v.date_vente, 'T', ' ')) as heure,
                 p.nom as produit,
                 p.societe,
                 v.quantite,
@@ -33,7 +33,7 @@ def rapport_journalier_json():
                 (v.quantite * v.prix_unitaire) as montant_total
             FROM ventes v
             JOIN produits p ON v.produit_id = p.id
-            WHERE DATE(v.date_vente) = ?
+            WHERE DATE(REPLACE(v.date_vente, 'T', ' ')) = ?
             ORDER BY v.date_vente ASC
         ''', (date_str,))
         ventes = [dict(row) for row in cursor.fetchall()]
@@ -47,7 +47,7 @@ def rapport_journalier_json():
                 COALESCE(SUM(v.quantite * (v.prix_unitaire - p.prix_achat)), 0) as benefice
             FROM ventes v
             JOIN produits p ON v.produit_id = p.id
-            WHERE DATE(v.date_vente) = ?
+            WHERE DATE(REPLACE(v.date_vente, 'T', ' ')) = ?
         ''', (date_str,))
         stats_ventes = dict(cursor.fetchone())
         
@@ -83,7 +83,7 @@ def rapport_journalier_json():
                 SUM(v.quantite * v.prix_unitaire) as revenus
             FROM ventes v
             JOIN produits p ON v.produit_id = p.id
-            WHERE DATE(v.date_vente) = ?
+            WHERE DATE(REPLACE(v.date_vente, 'T', ' ')) = ?
             GROUP BY p.societe
         ''', (date_str,))
         par_societe = [dict(row) for row in cursor.fetchall()]
@@ -123,7 +123,7 @@ def rapport_journalier():
                 (v.prix_unitaire - p.prix_achat) as marge_unitaire
             FROM ventes v
             JOIN produits p ON v.produit_id = p.id
-            WHERE DATE(v.date_vente) = ?
+            WHERE DATE(REPLACE(v.date_vente, 'T', ' ')) = ?
             ORDER BY v.date_vente ASC
         ''', (date_str,))
         
@@ -283,15 +283,15 @@ def bilan_periode():
         # Ventes sur la période
         cursor.execute('''
             SELECT 
-                DATE(v.date_vente) as date,
+                DATE(REPLACE(v.date_vente, 'T', ' ')) as date,
                 COUNT(*) as nb_ventes,
                 SUM(v.quantite) as articles,
                 SUM(v.quantite * v.prix_unitaire) as revenu,
                 SUM(v.quantite * (v.prix_unitaire - p.prix_achat)) as benefice
             FROM ventes v
             JOIN produits p ON v.produit_id = p.id
-            WHERE DATE(v.date_vente) BETWEEN ? AND ?
-            GROUP BY DATE(v.date_vente)
+            WHERE DATE(REPLACE(v.date_vente, 'T', ' ')) BETWEEN ? AND ?
+            GROUP BY DATE(REPLACE(v.date_vente, 'T', ' '))
             ORDER BY date ASC
         ''', (debut, fin))
         
@@ -306,7 +306,7 @@ def bilan_periode():
                 SUM(v.quantite * v.prix_unitaire) as revenu
             FROM ventes v
             JOIN produits p ON v.produit_id = p.id
-            WHERE DATE(v.date_vente) BETWEEN ? AND ?
+            WHERE DATE(REPLACE(v.date_vente, 'T', ' ')) BETWEEN ? AND ?
             GROUP BY p.id
             ORDER BY revenu DESC
             LIMIT 10
@@ -402,5 +402,156 @@ def bilan_periode():
             mimetype='application/pdf'
         )
         
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@rapports_bp.route('/mensuel-json', methods=['GET'])
+def rapport_mensuel_json():
+    """Retourne les données JSON pour le rapport mensuel (mois courant ou donné)."""
+    try:
+        annee = request.args.get('annee', type=int)
+        mois = request.args.get('mois', type=int)
+        from datetime import datetime, date
+        today = datetime.now().date()
+        if not annee or not mois:
+            annee = today.year
+            mois = today.month
+
+        # Calculer debut / fin
+        debut = date(annee, mois, 1)
+        if mois == 12:
+            fin = date(annee + 1, 1, 1) - timedelta(days=1)
+        else:
+            fin = date(annee, mois + 1, 1) - timedelta(days=1)
+
+        conn = get_db()
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            SELECT 
+                DATE(v.date_vente) as date,
+                COUNT(*) as nb_ventes,
+                SUM(v.quantite) as articles,
+                SUM(v.quantite * v.prix_unitaire) as revenu,
+                SUM(v.quantite * (v.prix_unitaire - p.prix_achat)) as benefice
+            FROM ventes v
+            JOIN produits p ON v.produit_id = p.id
+            WHERE DATE(REPLACE(v.date_vente, 'T', ' ')) BETWEEN ? AND ?
+            GROUP BY DATE(REPLACE(v.date_vente, 'T', ' '))
+            ORDER BY date ASC
+        ''', (debut.isoformat(), fin.isoformat()))
+        ventes = [dict(r) for r in cursor.fetchall()]
+
+        # Top produits du mois
+        cursor.execute('''
+            SELECT p.nom, p.societe, SUM(v.quantite) as quantite, SUM(v.quantite * v.prix_unitaire) as revenu
+            FROM ventes v
+            JOIN produits p ON v.produit_id = p.id
+            WHERE DATE(REPLACE(v.date_vente, 'T', ' ')) BETWEEN ? AND ?
+            GROUP BY p.id
+            ORDER BY revenu DESC
+            LIMIT 20
+        ''', (debut.isoformat(), fin.isoformat()))
+        top = [dict(r) for r in cursor.fetchall()]
+
+        conn.close()
+        return jsonify({'success': True, 'annee': annee, 'mois': mois, 'ventes': ventes, 'top_produits': top})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@rapports_bp.route('/mensuel', methods=['GET'])
+def rapport_mensuel():
+    """Génère le PDF du rapport mensuel (utilise /mensuel-json pour les données)."""
+    try:
+        annee = request.args.get('annee', type=int)
+        mois = request.args.get('mois', type=int)
+        from datetime import datetime, date
+        today = datetime.now().date()
+        if not annee or not mois:
+            annee = today.year
+            mois = today.month
+
+        debut = date(annee, mois, 1)
+        if mois == 12:
+            fin = date(annee + 1, 1, 1) - timedelta(days=1)
+        else:
+            fin = date(annee, mois + 1, 1) - timedelta(days=1)
+
+        # Réutilise la logique de bilan_periode mais avec debut/fin calculés
+        return bilan_periode_inner(debut.isoformat(), fin.isoformat(), f"mensuel_{annee}_{mois}")
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+def bilan_periode_inner(debut, fin, filename_prefix):
+    """Helper pour générer un PDF de bilan pour une période (internal)."""
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            SELECT 
+                DATE(v.date_vente) as date,
+                COUNT(*) as nb_ventes,
+                SUM(v.quantite) as articles,
+                SUM(v.quantite * v.prix_unitaire) as revenu,
+                SUM(v.quantite * (v.prix_unitaire - p.prix_achat)) as benefice
+            FROM ventes v
+            JOIN produits p ON v.produit_id = p.id
+            WHERE DATE(REPLACE(v.date_vente, 'T', ' ')) BETWEEN ? AND ?
+            GROUP BY DATE(REPLACE(v.date_vente, 'T', ' '))
+            ORDER BY date ASC
+        ''', (debut, fin))
+        ventes = cursor.fetchall()
+
+        cursor.execute('''
+            SELECT p.nom, p.societe, SUM(v.quantite) as quantite, SUM(v.quantite * v.prix_unitaire) as revenu
+            FROM ventes v
+            JOIN produits p ON v.produit_id = p.id
+            WHERE DATE(v.date_vente) BETWEEN ? AND ?
+            GROUP BY p.id
+            ORDER BY revenu DESC
+            LIMIT 10
+        ''', (debut, fin))
+        top_produits = cursor.fetchall()
+
+        conn.close()
+
+        # Génération PDF similaire à bilan_periode
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4)
+        styles = getSampleStyleSheet()
+        elements = []
+        title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=18, alignment=1, spaceAfter=20)
+        elements.append(Paragraph(f"Bilan du {debut} au {fin}", title_style))
+        elements.append(Spacer(1, 0.5*cm))
+
+        # Totaux
+        total_revenu = sum(v['revenu'] for v in ventes) if ventes else 0
+        total_benefice = sum(v['benefice'] for v in ventes) if ventes else 0
+        summary_data = [
+            ['Période', f"{debut} au {fin}"],
+            ['Total revenus', f"{total_revenu:,.0f} FCFA"],
+            ['Total bénéfice', f"{total_benefice:,.0f} FCFA"],
+        ]
+        summary_table = Table(summary_data, colWidths=[4*cm, 6*cm])
+        summary_table.setStyle(TableStyle([('FONTNAME', (0,0), (-1,-1), 'Helvetica'), ('FONTSIZE', (0,0), (-1,-1), 11), ('GRID', (0,0), (-1,-1), 0.5, colors.grey)]))
+        elements.append(summary_table)
+        elements.append(Spacer(1, 1*cm))
+
+        if top_produits:
+            elements.append(Paragraph("<b>Top produits</b>", styles['Heading2']))
+            top_data = [['Produit','Société','Qté','Revenu']]
+            for p in top_produits:
+                top_data.append([p['nom'], p['societe'], str(p['quantite']), f"{p['revenu']:,.0f} FCFA"])
+            top_table = Table(top_data, colWidths=[5*cm,3*cm,2*cm,4*cm])
+            top_table.setStyle(TableStyle([('FONTNAME',(0,0),(-1,-1),'Helvetica'),('FONTSIZE',(0,0),(-1,-1),10),('GRID',(0,0),(-1,-1),0.5,colors.grey),('BACKGROUND',(0,0),(-1,0),colors.lightgrey)]))
+            elements.append(top_table)
+
+        doc.build(elements)
+        buffer.seek(0)
+        return send_file(buffer, as_attachment=True, download_name=f"{filename_prefix}_{debut}_au_{fin}.pdf", mimetype='application/pdf')
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500

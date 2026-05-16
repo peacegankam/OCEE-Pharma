@@ -17,6 +17,22 @@
                 <div class="kpi-trend positive">+12% vs hier</div>
             </div>
         </div>
+        <div class="kpi-card">
+            <div class="kpi-icon"><i class="fas fa-calendar-days"></i></div>
+            <div class="kpi-content">
+                <div class="kpi-title">Revenus du mois</div>
+                <div class="kpi-value"><span id="kpi-revenus-mois">0</span> <span class="currency">FCFA</span></div>
+                <div class="kpi-trend">Mois en cours</div>
+            </div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-icon"><i class="fas fa-globe"></i></div>
+            <div class="kpi-content">
+                <div class="kpi-title">Revenus totaux</div>
+                <div class="kpi-value"><span id="kpi-revenus-total">0</span> <span class="currency">FCFA</span></div>
+                <div class="kpi-trend">Historique complet</div>
+            </div>
+        </div>
         {% endif %}
 
         <div class="kpi-card">
@@ -171,6 +187,17 @@
     // Script spécifique à la page index
     document.addEventListener('DOMContentLoaded', function () {
         console.log("📊 Page dashboard chargée");
+
+        // Charger les KPIs et alertes
+        if (typeof chargerKPIs === 'function') {
+            chargerKPIs();
+        }
+        if (typeof chargerStocksCritiques === 'function') {
+            chargerStocksCritiques();
+        }
+        if (typeof chargerAlertesHeader === 'function') {
+            chargerAlertesHeader();
+        }
 
         // Charger les graphiques
         if (typeof chargerRevenusSemaine === 'function') {

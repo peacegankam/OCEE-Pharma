@@ -174,6 +174,8 @@ function chargerKPIs() {
       };
       // Utiliser formaterMontant() pour les montants, laisser le HTML ajouter FCFA via <span class="currency">FCFA</span>
       set('kpi-revenus',  formaterMontant(data.revenus_jour || 0));
+      set('kpi-revenus-mois', formaterMontant(data.revenus_mensuel || 0));
+      set('kpi-revenus-total', formaterMontant(data.revenus_total || 0));
       set('kpi-ventes',   formaterQuantite(data.ventes_jour || 0) + ' articles');
       set('kpi-benefice', formaterMontant(data.benefice_jour || 0));
       set('kpi-alertes',  formaterQuantite(data.alertes_stock || 0) + ' produits');

@@ -158,7 +158,7 @@
     }
 
     async function chargerProduits() {
-        const res = await fetch('/api/produits/');
+        const res = await fetch('/api/produits/?with_stock=true');
         const data = await res.json();
         if (data.success) {
             afficherTableProduits(data.produits);

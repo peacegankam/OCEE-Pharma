@@ -544,7 +544,7 @@
             if (!zone || !tbody) return;
 
             // On réutilise l'API stocks critiques (ruputure/alerte)
-            const res = await fetch('/api/stocks/critiques');
+            const res = await fetch('/api/dashboard/stocks-critiques');
             const data = await res.json();
 
             // Selon implémentation, soit {success:true, stocks:[...]}, soit tableau direct

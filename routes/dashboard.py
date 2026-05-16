@@ -8,6 +8,8 @@ from database import (
     get_db,
     get_stats_globales,
     get_revenus_semaine,
+    get_revenus_mensuel,
+    get_revenus_total,
     get_top_produits,
     get_repartition_societes,
     get_stocks_critiques
@@ -56,7 +58,9 @@ def get_kpis():
             'revenus_jour': stats.get('revenus_jour', 0),
             'ventes_jour': stats.get('ventes_jour', 0),
             'benefice_jour': stats.get('benefice_jour', 0),
-            'alertes_stock': total_alertes
+            'alertes_stock': total_alertes,
+            'revenus_mensuel': get_revenus_mensuel(),
+            'revenus_total': get_revenus_total()
         })
     except Exception as e:
         print(f"Erreur dashboard/kpis: {str(e)}")
@@ -506,17 +510,17 @@ def get_bilan():
                 COALESCE(SUM(v.quantite * (v.prix_unitaire - p.prix_achat)), 0) as benefice
             FROM ventes v
             JOIN produits p ON v.produit_id = p.id
-            WHERE DATE(v.date_vente) BETWEEN ? AND ?
+            WHERE DATE(REPLACE(v.date_vente, 'T', ' ')) BETWEEN ? AND ?
         ''', (debut, fin))
         
         totals = dict(cursor.fetchone())
         
         # Évolution journalière
         cursor.execute('''
-            SELECT DATE(date_vente) as date, SUM(quantite * prix_unitaire) as montant
+            SELECT DATE(REPLACE(date_vente, 'T', ' ')) as date, SUM(quantite * prix_unitaire) as montant
             FROM ventes
-            WHERE DATE(date_vente) BETWEEN ? AND ?
-            GROUP BY DATE(date_vente)
+            WHERE DATE(REPLACE(date_vente, 'T', ' ')) BETWEEN ? AND ?
+            GROUP BY DATE(REPLACE(date_vente, 'T', ' '))
             ORDER BY date ASC
         ''', (debut, fin))
         
@@ -527,7 +531,7 @@ def get_bilan():
             SELECT p.societe, SUM(v.quantite * v.prix_unitaire) as revenus, SUM(v.quantite) as qte
             FROM ventes v
             JOIN produits p ON v.produit_id = p.id
-            WHERE DATE(v.date_vente) BETWEEN ? AND ?
+            WHERE DATE(REPLACE(v.date_vente, 'T', ' ')) BETWEEN ? AND ?
             GROUP BY p.societe
             ORDER BY revenus DESC
         ''', (debut, fin))
@@ -539,7 +543,7 @@ def get_bilan():
             SELECT p.nom as produit, p.societe, SUM(v.quantite) as qte, SUM(v.quantite * v.prix_unitaire) as revenus
             FROM ventes v
             JOIN produits p ON v.produit_id = p.id
-            WHERE DATE(v.date_vente) BETWEEN ? AND ?
+            WHERE DATE(REPLACE(v.date_vente, 'T', ' ')) BETWEEN ? AND ?
             GROUP BY p.id
             ORDER BY revenus DESC
             LIMIT 10

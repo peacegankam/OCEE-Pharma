@@ -61,11 +61,11 @@ def get_forecast():
         # Récupérer l'historique
         cursor.execute('''
             SELECT 
-                DATE(date_vente) as date,
+                DATE(REPLACE(date_vente, 'T', ' ')) as date,
                 COALESCE(SUM(quantite * prix_unitaire), 0) as revenu
             FROM ventes
-            WHERE date_vente >= DATE('now', '-30 days')
-            GROUP BY DATE(date_vente)
+            WHERE DATE(REPLACE(date_vente, 'T', ' ')) >= DATE('now', '-30 days')
+            GROUP BY DATE(REPLACE(date_vente, 'T', ' '))
             ORDER BY date ASC
         ''')
         
@@ -114,7 +114,7 @@ def get_trends():
                     SELECT COALESCE(SUM(v.quantite * v.prix_unitaire), 0) as total
                     FROM ventes v
                     JOIN produits p ON v.produit_id = p.id
-                    WHERE p.societe = ? AND DATE(v.date_vente) = ?
+                    WHERE p.societe = ? AND DATE(REPLACE(v.date_vente, 'T', ' ')) = ?
                 ''', (societe, date.isoformat()))
                 
                 valeurs.append(cursor.fetchone()['total'])
@@ -158,7 +158,7 @@ def get_products_ml():
                 SUM(v.quantite * v.prix_unitaire) as montant
             FROM ventes v
             JOIN produits p ON v.produit_id = p.id
-            WHERE v.date_vente >= DATE('now', ? || ' days')
+            WHERE DATE(REPLACE(v.date_vente, 'T', ' ')) >= DATE('now', ? || ' days')
             GROUP BY p.id
             ORDER BY quantite DESC
             LIMIT 10
@@ -174,11 +174,11 @@ def get_products_ml():
                 p.societe,
                 s.quantite as stock_actuel,
                 p.seuil_alerte as seuil_min,
-                COALESCE((
+                    COALESCE((
                     SELECT AVG(v.quantite)
                     FROM ventes v
                     WHERE v.produit_id = p.id
-                    AND v.date_vente >= DATE('now', '-7 days')
+                    AND DATE(REPLACE(v.date_vente, 'T', ' ')) >= DATE('now', '-7 days')
                 ), 0) as conso_journaliere,
                 CASE 
                     WHEN s.quantite = 0 THEN 'haute'
@@ -216,7 +216,7 @@ def get_products_ml():
                 END as jour_nom,
                 AVG(quantite * prix_unitaire) as moyenne
             FROM ventes
-            WHERE date_vente >= DATE('now', '-30 days')
+            WHERE DATE(REPLACE(date_vente, 'T', ' ')) >= DATE('now', '-30 days')
             GROUP BY jour_num
             ORDER BY moyenne DESC
             LIMIT 1

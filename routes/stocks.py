@@ -169,12 +169,12 @@ def ajuster_stock():
         # Récupérer le stock actuel
         cursor.execute('SELECT quantite FROM stocks WHERE produit_id = ?', (produit_id,))
         stock_actuel = cursor.fetchone()
-        
+        # Si la ligne de stock n'existe pas encore, la créer (ancien=0)
         if not stock_actuel:
-            return jsonify({'success': False, 'message': 'Produit non trouvé'}), 404
-        
-        ancien = stock_actuel['quantite']
-        
+            ancien = 0
+        else:
+            ancien = stock_actuel['quantite']
+
         if type_ajust == 'ajout':
             nouveau = ancien + quantite
         else:  # retrait
@@ -182,13 +182,19 @@ def ajuster_stock():
                 return jsonify({'success': False, 'message': 'Stock insuffisant pour le retrait'}), 400
             nouveau = ancien - quantite
         
-        # Mettre à jour le stock
+        # Mettre à jour ou insérer le stock
         date_actuelle = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        cursor.execute('''
-            UPDATE stocks 
-            SET quantite = ?, derniere_maj = ?
-            WHERE produit_id = ?
-        ''', (nouveau, date_actuelle, produit_id))
+        if stock_actuel:
+            cursor.execute('''
+                UPDATE stocks 
+                SET quantite = ?, derniere_maj = ?
+                WHERE produit_id = ?
+            ''', (nouveau, date_actuelle, produit_id))
+        else:
+            cursor.execute('''
+                INSERT INTO stocks (produit_id, quantite, derniere_maj)
+                VALUES (?, ?, ?)
+            ''', (produit_id, nouveau, date_actuelle))
         
         # Enregistrer dans l'historique
         cursor.execute('''

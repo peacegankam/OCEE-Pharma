@@ -293,7 +293,7 @@ def get_ventes_aujourdhui():
         SELECT v.*, p.nom, p.societe
         FROM ventes v
         JOIN produits p ON v.produit_id = p.id
-        WHERE DATE(v.date_vente) = ?
+        WHERE DATE(REPLACE(v.date_vente, 'T', ' ')) = ?
         ORDER BY v.date_vente DESC
     ''', (today.isoformat(),))
     result = cursor.fetchall()
@@ -308,7 +308,7 @@ def get_stats_globales():
     cursor.execute('''
         SELECT COALESCE(SUM(v.quantite * v.prix_unitaire), 0) as total
         FROM ventes v
-        WHERE DATE(v.date_vente) = ?
+        WHERE DATE(REPLACE(v.date_vente, 'T', ' ')) = ?
     ''', (today.isoformat(),))
     row = cursor.fetchone()
     revenus_jour = row['total'] if row else 0
@@ -316,7 +316,7 @@ def get_stats_globales():
     cursor.execute('''
         SELECT COALESCE(SUM(v.quantite), 0) as total
         FROM ventes v
-        WHERE DATE(v.date_vente) = ?
+        WHERE DATE(REPLACE(v.date_vente, 'T', ' ')) = ?
     ''', (today.isoformat(),))
     row = cursor.fetchone()
     ventes_jour = row['total'] if row else 0
@@ -325,7 +325,7 @@ def get_stats_globales():
         SELECT COALESCE(SUM(v.quantite * (v.prix_unitaire - p.prix_achat)), 0) as benefice
         FROM ventes v
         JOIN produits p ON v.produit_id = p.id
-        WHERE DATE(v.date_vente) = ?
+        WHERE DATE(REPLACE(v.date_vente, 'T', ' ')) = ?
     ''', (today.isoformat(),))
     row = cursor.fetchone()
     benefice_jour = row['benefice'] if row else 0
@@ -358,7 +358,7 @@ def get_revenus_semaine():
         cursor.execute('''
             SELECT COALESCE(SUM(quantite * prix_unitaire), 0) as total
             FROM ventes
-            WHERE DATE(date_vente) = ?
+            WHERE DATE(REPLACE(date_vente, 'T', ' ')) = ?
         ''', (date.isoformat(),))
         row = cursor.fetchone()
         revenus.append(row['total'] if row else 0)
@@ -393,6 +393,48 @@ def get_repartition_societes():
     result = cursor.fetchall()
     conn.close()
     return result
+
+def get_revenus_mensuel(year=None, month=None):
+    """Retourne le total des revenus pour le mois demandé (ou mois courant)."""
+    conn = get_db()
+    cursor = conn.cursor()
+    from datetime import datetime, timedelta
+    today = datetime.now().date()
+    if year is None or month is None:
+        year = today.year
+        month = today.month
+
+    # Première journée du mois
+    debut = datetime(year, month, 1).date()
+    # Premier jour du mois suivant
+    if month == 12:
+        suivant = datetime(year + 1, 1, 1).date()
+    else:
+        suivant = datetime(year, month + 1, 1).date()
+
+    cursor.execute('''
+        SELECT COALESCE(SUM(quantite * prix_unitaire), 0) as total
+        FROM ventes
+        WHERE DATE(date_vente) >= ? AND DATE(date_vente) < ?
+    ''', (debut.isoformat(), suivant.isoformat()))
+
+    row = cursor.fetchone()
+    total = row['total'] if row else 0
+    conn.close()
+    return total
+
+def get_revenus_total():
+    """Retourne le total cumulé des revenus depuis le début des enregistrements."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT COALESCE(SUM(quantite * prix_unitaire), 0) as total
+        FROM ventes
+    ''')
+    row = cursor.fetchone()
+    total = row['total'] if row else 0
+    conn.close()
+    return total
 
 def get_stocks_critiques():
     conn = get_db()

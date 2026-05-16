@@ -103,10 +103,10 @@ def get_ventes_aujourdhui():
         # Récupérer toutes les ventes du jour
         cursor.execute('''
             SELECT v.*, p.nom, p.societe, 
-                   strftime('%H:%M', v.date_vente) as heure
+                   strftime('%H:%M', REPLACE(v.date_vente, 'T', ' ')) as heure
             FROM ventes v
             JOIN produits p ON v.produit_id = p.id
-            WHERE DATE(v.date_vente) = ?
+            WHERE DATE(REPLACE(v.date_vente, 'T', ' ')) = ?
             ORDER BY v.date_vente DESC
         ''', (today.isoformat(),))
         
@@ -120,7 +120,7 @@ def get_ventes_aujourdhui():
                 COALESCE(SUM(v.quantite * (v.prix_unitaire - p.prix_achat)), 0) as benefice
             FROM ventes v
             JOIN produits p ON v.produit_id = p.id
-            WHERE DATE(v.date_vente) = ?
+            WHERE DATE(REPLACE(v.date_vente, 'T', ' ')) = ?
         ''', (today.isoformat(),))
         
         totals = cursor.fetchone()
@@ -154,8 +154,8 @@ def get_ventes_par_heure():
             cursor.execute('''
                 SELECT COALESCE(SUM(v.quantite * v.prix_unitaire), 0) as montant
                 FROM ventes v
-                WHERE DATE(v.date_vente) = ? 
-                AND strftime('%H', v.date_vente) = ?
+                WHERE DATE(REPLACE(v.date_vente, 'T', ' ')) = ? 
+                AND strftime('%H', REPLACE(v.date_vente, 'T', ' ')) = ?
             ''', (today.isoformat(), f'{heure:02d}'))
             
             montant = cursor.fetchone()['montant']
@@ -186,14 +186,14 @@ def get_ventes_periode():
         
         cursor.execute('''
             SELECT 
-                DATE(v.date_vente) as date,
+                DATE(REPLACE(v.date_vente, 'T', ' ')) as date,
                 COUNT(*) as nb_ventes,
                 COALESCE(SUM(v.quantite * v.prix_unitaire), 0) as total,
                 COALESCE(SUM(v.quantite * (v.prix_unitaire - p.prix_achat)), 0) as benefice
             FROM ventes v
             JOIN produits p ON v.produit_id = p.id
-            WHERE DATE(v.date_vente) BETWEEN ? AND ?
-            GROUP BY DATE(v.date_vente)
+            WHERE DATE(REPLACE(v.date_vente, 'T', ' ')) BETWEEN ? AND ?
+            GROUP BY DATE(REPLACE(v.date_vente, 'T', ' '))
             ORDER BY date ASC
         ''', (debut, fin))
         

@@ -98,6 +98,84 @@ def enregistrer_appro():
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
+@appro_bp.route('/bon-commande', methods=['POST'])
+def enregistrer_bon_commande():
+    """Enregistre un bon de commande sous forme d'approvisionnements."""
+    try:
+        data = request.get_json() or {}
+        lignes = data.get('lignes', [])
+        date_commande = data.get('date')
+        fournisseur = data.get('fournisseur', '').strip()
+
+        if not date_commande:
+            return jsonify({'success': False, 'message': 'Date du bon de commande requise'}), 400
+        if not lignes or not isinstance(lignes, list):
+            return jsonify({'success': False, 'message': 'Aucune ligne de commande fournie'}), 400
+
+        conn = get_db()
+        cursor = conn.cursor()
+        date_actuelle = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        total_lignes = 0
+
+        for ligne in lignes:
+            produit_id = ligne.get('produit_id')
+            quantite = ligne.get('quantite')
+            prix_achat = ligne.get('prix_achat_unitaire')
+            note = ligne.get('note', '').strip() or f'Bon de commande {date_commande} - {fournisseur or "Fournisseur"}'
+
+            if not produit_id or not quantite or quantite <= 0:
+                continue
+
+            cursor.execute('SELECT * FROM produits WHERE id = ?', (produit_id,))
+            produit = cursor.fetchone()
+            if not produit:
+                continue
+
+            if prix_achat is None:
+                prix_achat = produit['prix_achat']
+
+            cursor.execute('SELECT quantite FROM stocks WHERE produit_id = ?', (produit_id,))
+            stock_actuel = cursor.fetchone()
+            ancien_stock = stock_actuel['quantite'] if stock_actuel else 0
+
+            cursor.execute('''
+                INSERT INTO approvisionnements
+                (produit_id, quantite, prix_achat_unitaire, note, date_appro)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (produit_id, quantite, prix_achat, note, date_actuelle))
+
+            if stock_actuel:
+                cursor.execute('''
+                    UPDATE stocks
+                    SET quantite = quantite + ?,
+                        derniere_maj = ?
+                    WHERE produit_id = ?
+                ''', (quantite, date_actuelle, produit_id))
+            else:
+                cursor.execute('''
+                    INSERT INTO stocks (produit_id, quantite, derniere_maj)
+                    VALUES (?, ?, ?)
+                ''', (produit_id, quantite, date_actuelle))
+
+            cursor.execute('''
+                INSERT INTO historique_stock
+                (produit_id, quantite_avant, quantite_apres, type, raison, date_mouvement)
+                VALUES (?, ?, ?, 'appro', ?, ?)
+            ''', (produit_id, ancien_stock, ancien_stock + quantite, note, date_actuelle))
+
+            total_lignes += 1
+
+        if total_lignes == 0:
+            conn.close()
+            return jsonify({'success': False, 'message': 'Aucune ligne valide dans le bon de commande'}), 400
+
+        conn.commit()
+        conn.close()
+
+        return jsonify({'success': True, 'message': 'Bon de commande enregistré et stock mis à jour', 'lignes': total_lignes})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
 @appro_bp.route('/historique', methods=['GET'])
 def get_historique_appro():
     """Retourne l'historique des approvisionnements"""

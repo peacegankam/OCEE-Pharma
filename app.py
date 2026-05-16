@@ -83,7 +83,11 @@ def login():
             session['user_id'] = user['id']
             session['nom'] = user['nom']
             session['role'] = user['role']
-            return redirect(url_for('index'))
+            # Rediriger selon le rôle
+            if user['role'] == 'admin':
+                return redirect(url_for('index'))
+            else:
+                return redirect(url_for('caisse_page'))
             
     conn.close()
     return render_template('login.html', nom_bar=nom_actuel, utilisateurs=utilisateurs)
