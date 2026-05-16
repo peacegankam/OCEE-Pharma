@@ -613,11 +613,13 @@ def generer_facture():
         
         elements = []
         
+        date_vente_str = articles[0]['date_vente']
+        
         # En-tête
         elements.append(Paragraph("OCEE PHARMA", bold_center))
         elements.append(Paragraph("Reçu de caisse", center_style))
         elements.append(Spacer(1, 3*mm))
-        elements.append(Paragraph(f"Date: {date_vente}", center_style))
+        elements.append(Paragraph(f"Date: {date_vente_str}", center_style))
         elements.append(Paragraph(f"Vendeur: {vendeur}", center_style))
         elements.append(Spacer(1, 5*mm))
         
@@ -661,7 +663,7 @@ def generer_facture():
         doc.build(elements)
         buffer.seek(0)
         
-        safe_date = date_vente.replace(':', '-').replace(' ', '_')
+        safe_date = str(date_vente_str).replace(':', '-').replace(' ', '_')
         return send_file(buffer, as_attachment=False, download_name=f"ticket_{safe_date}.pdf", mimetype='application/pdf')
         
     except Exception as e:
