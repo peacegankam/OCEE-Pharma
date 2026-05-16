@@ -6,7 +6,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, 'data', 'pharma.sqlite')
 
 # Configuration Base de données (Type: 'sqlite' ou 'mysql')
-DB_TYPE = 'sqlite' 
+DB_TYPE = 'mysql'
 DB_HOST = 'localhost'
 DB_USER = 'root'
 DB_PASSWORD = ''

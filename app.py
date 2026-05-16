@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from functools import wraps
 
 # Import des modules de configuration
-from config import NOM_BAR, DEVISE, ADMIN_PIN
+from config import NOM_BAR, DEVISE, ADMIN_PIN, DB_TYPE, DB_NAME
 
 # Import des routes (blueprints)
 from routes.produits import produits_bp
@@ -207,7 +207,8 @@ if __name__ == '__main__':
     ===================================
     Interface: http://localhost:5000
     Test API:  http://localhost:5000/api/test
-    Base: data/pharma.sqlite
+    DB_TYPE: {DB_TYPE}
+    DB_NAME: {DB_NAME}
     ===================================
     """)
     app.run(debug=True, host='0.0.0.0', port=5000)
