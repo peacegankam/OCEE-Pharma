@@ -122,57 +122,59 @@ document.addEventListener('DOMContentLoaded', function() {
      * Afficher les stocks dans le tableau
      */
     function afficherStocks(stocks) {
-        if (!stocksTableBody) return;
-        
-        if (!stocks.length) {
-            stocksTableBody.innerHTML = '<tr><td colspan="8" class="table-empty">Aucun produit en stock</td></tr>';
-            return;
-        }
-        
-        stocksTableBody.innerHTML = stocks.map(p => {
-            const stockClass = p.quantite === 0 ? 'stock-rupture' :
-                              p.quantite <= p.seuil_alerte / 2 ? 'stock-critique' :
-                              p.quantite <= p.seuil_alerte ? 'stock-faible' : 'stock-ok';
+        setupPagination('stocks-table-container', stocks, function(pageData) {
+            if (!stocksTableBody) return;
             
-            return `
-                <tr>
-                    <td><strong>${p.nom}</strong></td>
-                    <td>${badgeSociete(p.societe)}</td>
-                    <td class="stock-quantite ${stockClass}">${p.quantite || '0'}</td>
-                    <td>${p.seuil_alerte || '0'}</td>
-                    <td>${formaterMontant(p.prix_achat || 0)} FCFA</td>
-                    <td>${formaterMontant(p.prix_vente || 0)} FCFA</td>
-                    <td>${formaterMontant(p.valeur || 0)} FCFA</td>
-                    <td>
-                        <button class="btn-ajuster" data-id="${p.id}" data-nom="${p.nom}" data-stock="${p.quantite}" data-seuil="${p.seuil_alerte}">
-                            <i class="fas fa-bolt"></i> Ajuster
-                        </button>
-                        <button class="btn-commander" data-id="${p.id}" data-nom="${p.nom}">
-                            <i class="fas fa-box"></i> Commander
-                        </button>
-                    </td>
-                </tr>
-            `;
-        }).join('');
-        
-        // Ajouter les écouteurs sur les boutons
-        document.querySelectorAll('.btn-ajuster').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const id = e.target.dataset.id;
-                const nom = e.target.dataset.nom;
-                const stock = parseInt(e.target.dataset.stock);
-                const seuil = parseInt(e.target.dataset.seuil);
-                ouvrirModalAjustement(id, nom, stock, seuil);
+            if (!pageData.length) {
+                stocksTableBody.innerHTML = '<tr><td colspan="8" class="table-empty">Aucun produit en stock</td></tr>';
+                return;
+            }
+            
+            stocksTableBody.innerHTML = pageData.map(p => {
+                const stockClass = p.quantite === 0 ? 'stock-rupture' :
+                                  p.quantite <= p.seuil_alerte / 2 ? 'stock-critique' :
+                                  p.quantite <= p.seuil_alerte ? 'stock-faible' : 'stock-ok';
+                
+                return `
+                    <tr>
+                        <td><strong>${p.nom}</strong></td>
+                        <td>${badgeSociete(p.societe)}</td>
+                        <td class="stock-quantite ${stockClass}">${p.quantite || '0'}</td>
+                        <td>${p.seuil_alerte || '0'}</td>
+                        <td>${formaterMontant(p.prix_achat || 0)} FCFA</td>
+                        <td>${formaterMontant(p.prix_vente || 0)} FCFA</td>
+                        <td>${formaterMontant(p.valeur || 0)} FCFA</td>
+                        <td>
+                            <button class="btn-ajuster" data-id="${p.id}" data-nom="${p.nom}" data-stock="${p.quantite}" data-seuil="${p.seuil_alerte}">
+                                <i class="fas fa-bolt"></i> Ajuster
+                            </button>
+                            <button class="btn-commander" data-id="${p.id}" data-nom="${p.nom}">
+                                <i class="fas fa-box"></i> Commander
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+            
+            // Ajouter les écouteurs sur les boutons
+            document.querySelectorAll('.btn-ajuster').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const id = e.target.dataset.id;
+                    const nom = e.target.dataset.nom;
+                    const stock = parseInt(e.target.dataset.stock);
+                    const seuil = parseInt(e.target.dataset.seuil);
+                    ouvrirModalAjustement(id, nom, stock, seuil);
+                });
             });
-        });
-        
-        document.querySelectorAll('.btn-commander').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const id = e.target.dataset.id;
-                const nom = e.target.dataset.nom;
-                commanderProduit(id, nom);
+            
+            document.querySelectorAll('.btn-commander').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const id = e.target.dataset.id;
+                    const nom = e.target.dataset.nom;
+                    commanderProduit(id, nom);
+                });
             });
-        });
+        }, 10);
     }
     
     /**
@@ -298,11 +300,12 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                afficherNotif('Stock ajusté avec succès', 'success');
-                if (ajustementModal) ajustementModal.style.display = 'none';
-                chargerStocks(); // Recharger la liste
-                chargerHistorique(); // Recharger l'historique
-                chargerAlertes(); // Mettre à jour les alertes
+                showSuccessModal('Ajustement réussi', 'Le stock a été mis à jour.', () => {
+                    if (ajustementModal) ajustementModal.style.display = 'none';
+                    chargerStocks(); // Recharger la liste
+                    chargerHistorique(); // Recharger l'historique
+                    chargerAlertes(); // Mettre à jour les alertes
+                });
             } else {
                 afficherNotif(data.message || 'Erreur lors de l\'ajustement', 'error');
             }
@@ -314,9 +317,9 @@ document.addEventListener('DOMContentLoaded', function() {
      * Commander un produit (redirection vers page appro)
      */
     function commanderProduit(id, nom) {
-        if (confirm(`Commander ${nom} ?`)) {
+        showConfirmModal('Commande', `Voulez-vous commander le produit ${nom} ?`, () => {
             window.location.href = `/appro?product=${id}`;
-        }
+        });
     }
     
     /**
@@ -341,27 +344,29 @@ document.addEventListener('DOMContentLoaded', function() {
      * Afficher l'historique dans le tableau
      */
     function afficherHistorique(mouvements) {
-        if (!histoTableBody) return;
-        
-        if (!mouvements.length) {
-            histoTableBody.innerHTML = '<tr><td colspan="5" class="table-empty">Aucun mouvement récent</td></tr>';
-            return;
-        }
-        
-        histoTableBody.innerHTML = mouvements.map(m => {
-            const typeClass = m.type === 'ajout' ? 'text-success' : 'text-danger';
-            const typeIcon = m.type === 'ajout' ? '➕' : '➖';
+        setupPagination('histo-table-container', mouvements, function(pageData) {
+            if (!histoTableBody) return;
             
-            return `
-                <tr>
-                    <td>${formaterDateHeure(m.date)}</td>
-                    <td><strong>${m.produit}</strong></td>
-                    <td class="${typeClass}">${typeIcon} ${m.type === 'ajout' ? '+' : '-'}${m.quantite}</td>
-                    <td>${m.raison || '—'}</td>
-                    <td>${m.responsable || 'Pharmacien'}</td>
-                </tr>
-            `;
-        }).join('');
+            if (!pageData.length) {
+                histoTableBody.innerHTML = '<tr><td colspan="5" class="table-empty">Aucun mouvement récent</td></tr>';
+                return;
+            }
+            
+            histoTableBody.innerHTML = pageData.map(m => {
+                const typeClass = m.type === 'ajout' ? 'text-success' : 'text-danger';
+                const typeIcon = m.type === 'ajout' ? '➕' : '➖';
+                
+                return `
+                    <tr>
+                        <td>${formaterDateHeure(m.date)}</td>
+                        <td><strong>${m.produit}</strong></td>
+                        <td class="${typeClass}">${typeIcon} ${m.type === 'ajout' ? '+' : '-'}${m.quantite}</td>
+                        <td>${m.raison || '—'}</td>
+                        <td>${m.responsable || 'Pharmacien'}</td>
+                    </tr>
+                `;
+            }).join('');
+        }, 10);
     }
     
     /**

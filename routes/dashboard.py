@@ -76,36 +76,11 @@ def get_kpis():
 def get_revenus_semaine_route():
     """Retourne les revenus des 7 derniers jours"""
     try:
-        # Essayer de récupérer depuis la base
         data = get_revenus_semaine()
-        
-        # Si pas de données, générer des données de démonstration
-        if not data or len(data) == 0:
-            today = datetime.now()
-            data = []
-            for i in range(6, -1, -1):
-                date = (today - timedelta(days=i)).strftime('%d/%m')
-                # Générer des revenus avec une tendance
-                base = 45000 + (i * 2000)
-                variation = random.randint(-5000, 5000)
-                data.append({
-                    'date': date,
-                    'revenu': base + variation
-                })
-        
         return jsonify(data)
     except Exception as e:
         print(f"Erreur dashboard/revenus-semaine: {str(e)}")
-        # Données de démonstration en cas d'erreur
-        today = datetime.now()
-        demo_data = []
-        for i in range(6, -1, -1):
-            date = (today - timedelta(days=i)).strftime('%d/%m')
-            demo_data.append({
-                'date': date,
-                'revenu': 45000 + (i * 2000) + random.randint(-3000, 3000)
-            })
-        return jsonify(demo_data)
+        return jsonify([])
 
 @dashboard_bp.route('/top-produits', methods=['GET'])
 def get_top_produits_route():
@@ -215,22 +190,7 @@ def get_peremptions_critiques_route():
         return jsonify({'success': True, 'produits': produits})
     except Exception as e:
         print(f"Erreur dashboard/peremptions-critiques: {str(e)}")
-        return jsonify({
-            'success': True,
-            'produits': [
-                {
-                    'id': 1,
-                    'nom': 'Amoxicilline 500mg',
-                    'societe': 'Antibiotiques',
-                    'quantite': 2,
-                    'seuil_alerte': 20,
-                    'date_peremption': '2026-05-20',
-                    'jours_restants': 7,
-                    'niveau': 'critique',
-                    'couleur': 'E63946'
-                }
-            ]
-        })
+        return jsonify({'success': False, 'produits': []})
 
 @dashboard_bp.route('/stocks-critiques', methods=['GET'])
 def get_stocks_critiques_route():
@@ -240,100 +200,81 @@ def get_stocks_critiques_route():
         cursor = conn.cursor()
         alertes = []
         
-        # 1. Alertes stock critique (quantité <= seuil alerte)
+        # 1. Ruptures de stock (quantité = 0)
         try:
             cursor.execute('''
-                SELECT p.id, p.nom, p.societe, s.quantite, p.seuil_alerte,
-                       'stock_critique' as type_alerte
-                FROM stocks s
-                JOIN produits p ON s.produit_id = p.id
-                WHERE s.quantite <= p.seuil_alerte
-                ORDER BY (s.quantite * 1.0 / NULLIF(p.seuil_alerte,0)) ASC
-            ''')
-            stocks = cursor.fetchall()
-            for s in stocks:
-                alertes.append({
-                    'id': s['id'],
-                    'nom': s['nom'],
-                    'societe': s['societe'],
-                    'quantite': s['quantite'],
-                    'seuil_alerte': s['seuil_alerte'],
-                    'type_alerte': 'stock_critique',
-                    'message': f"Stock faible: {s['quantite']} / {s['seuil_alerte']}"
-                })
-        except Exception as e:
-            print(f"Erreur récupération stocks critiques: {e}")
-        
-        # 2. Alertes péremption (date <= 30 jours)
-        try:
-            cursor.execute('''
-                SELECT p.id, p.nom, p.societe, s.quantite, p.seuil_alerte,
-                       p.date_peremption, 'peremption' as type_alerte
-                FROM stocks s
-                JOIN produits p ON s.produit_id = p.id
-                WHERE p.date_peremption IS NOT NULL
-                AND date(p.date_peremption) <= date('now', '+30 day')
-                AND date(p.date_peremption) >= date('now')
-                ORDER BY date(p.date_peremption) ASC
-            ''')
-            peremptions = cursor.fetchall()
-            for p in peremptions:
-                try:
-                    dp = datetime.fromisoformat(str(p['date_peremption'])).date() if p['date_peremption'] else None
-                    jours = (dp - datetime.now().date()).days if dp else None
-                    
-                    niveau = 'critique' if jours and jours <= 7 else 'surveillance'
-                    
-                    alertes.append({
-                        'id': p['id'],
-                        'nom': p['nom'],
-                        'societe': p['societe'],
-                        'quantite': p['quantite'],
-                        'seuil_alerte': p['seuil_alerte'],
-                        'type_alerte': 'peremption',
-                        'date_peremption': p['date_peremption'],
-                        'jours_restants': jours,
-                        'niveau': niveau,
-                        'message': f"Péremption: {jours} jours restants"
-                    })
-                except Exception as e:
-                    print(f"Erreur traitement péremption: {e}")
-        except Exception as e:
-            print(f"Erreur récupération péremptions: {e}")
-        
-        # 3. Alertes rupture de stock (quantité = 0)
-        try:
-            cursor.execute('''
-                SELECT p.id, p.nom, p.societe, s.quantite, p.seuil_alerte,
-                       'rupture' as type_alerte
+                SELECT p.id, p.nom, p.societe, s.quantite, p.seuil_alerte
                 FROM stocks s
                 JOIN produits p ON s.produit_id = p.id
                 WHERE s.quantite = 0
             ''')
-            ruptures = cursor.fetchall()
-            for r in ruptures:
+            rows = cursor.fetchall()
+            for r in rows:
                 alertes.append({
-                    'id': r['id'],
-                    'nom': r['nom'],
-                    'societe': r['societe'],
-                    'quantite': r['quantite'],
-                    'seuil_alerte': r['seuil_alerte'],
-                    'type_alerte': 'rupture',
-                    'message': 'Rupture de stock complète'
+                    'id': r['id'], 'nom': r['nom'], 'societe': r['societe'],
+                    'quantite': 0, 'seuil_alerte': r['seuil_alerte'],
+                    'type_alerte': 'rupture', 'niveau': 'critique',
+                    'message': 'RUPTURE DE STOCK'
                 })
-        except Exception as e:
-            print(f"Erreur récupération ruptures: {e}")
-        
+        except Exception as e: print(f"Erreur ruptures: {e}")
+
+        # 2. Stocks critiques (0 < quantité <= seuil)
+        try:
+            cursor.execute('''
+                SELECT p.id, p.nom, p.societe, s.quantite, p.seuil_alerte
+                FROM stocks s
+                JOIN produits p ON s.produit_id = p.id
+                WHERE s.quantite > 0 AND s.quantite <= p.seuil_alerte
+            ''')
+            rows = cursor.fetchall()
+            for r in rows:
+                alertes.append({
+                    'id': r['id'], 'nom': r['nom'], 'societe': r['societe'],
+                    'quantite': r['quantite'], 'seuil_alerte': r['seuil_alerte'],
+                    'type_alerte': 'stock_critique', 'niveau': 'warning',
+                    'message': f"Stock faible: {r['quantite']} unités"
+                })
+        except Exception as e: print(f"Erreur stocks bas: {e}")
+
+        # 3. Péremptions (périmés ou dans moins de 30 jours)
+        try:
+            cursor.execute('''
+                SELECT p.id, p.nom, p.societe, p.date_peremption, s.quantite
+                FROM produits p
+                JOIN stocks s ON p.id = s.produit_id
+                WHERE p.date_peremption IS NOT NULL
+                AND date(p.date_peremption) <= date('now', '+30 day')
+            ''')
+            rows = cursor.fetchall()
+            today = datetime.now().date()
+            for r in rows:
+                dp = datetime.fromisoformat(str(r['date_peremption'])).date()
+                jours = (dp - today).days
+                if jours < 0:
+                    niveau, msg = 'critique', f"PÉRIMÉ ({abs(jours)}j)"
+                elif jours <= 7:
+                    niveau, msg = 'warning', f"Périme dans {jours}j"
+                else:
+                    niveau, msg = 'faible', f"Périme dans {jours}j"
+                
+                alertes.append({
+                    'id': r['id'], 'nom': r['nom'], 'societe': r['societe'],
+                    'quantite': r['quantite'], 'seuil_alerte': 0, 
+                    'date_peremption': str(r['date_peremption']), 'jours_restants': jours,
+                    'type_alerte': 'peremption', 'niveau': niveau,
+                    'message': msg
+                })
+        except Exception as e: print(f"Erreur peremptions: {e}")
+
         conn.close()
         
-        # Trier par type d'alerte (rupture > critique > surveillance)
-        type_ordre = {'rupture': 0, 'peremption': 1, 'stock_critique': 2}
-        alertes.sort(key=lambda x: (type_ordre.get(x.get('type_alerte'), 3), x.get('message', '')))
+        # Tri : critique d'abord, puis warning, puis faible
+        ordre = {'critique': 0, 'warning': 1, 'faible': 2}
+        alertes.sort(key=lambda x: (ordre.get(x.get('niveau'), 3), x.get('type_alerte')))
         
-        return jsonify({'success': True, 'stocks': alertes[:20]})
+        return jsonify({'success': True, 'stocks': alertes[:25]})
     except Exception as e:
-        print(f"Erreur dashboard/stocks-critiques: {str(e)}")
-        return jsonify({'success': True, 'stocks': []})
+        return jsonify({'success': False, 'message': str(e)})
 
 @dashboard_bp.route('/ventes-recentes', methods=['GET'])
 def get_ventes_recentes():
@@ -355,46 +296,16 @@ def get_ventes_recentes():
         ventes = cursor.fetchall()
         conn.close()
         
-        # Si pas de ventes, données démo
         if not ventes or len(ventes) == 0:
-            demo_ventes = []
-            now = datetime.now()
-            for i in range(5):
-                demo_ventes.append({
-                    'id': i+1,
-                    'date_vente': (now - timedelta(minutes=15*i)).isoformat(),
-                    'produit': ['Castel Beer', 'Guinness', 'Mützig', 'Tangui', 'Whisky'][i % 5],
-                    'quantite': i+1,
-                    'prix_unitaire': [600, 900, 650, 300, 4500][i % 5],
-                    'total': [600, 900, 650, 300, 4500][i % 5] * (i+1)
-                })
-            return jsonify({
-                'success': True,
-                'ventes': demo_ventes
-            })
-        
+            return jsonify({'success': True, 'ventes': []})
+            
         return jsonify({
             'success': True,
             'ventes': [dict(v) for v in ventes]
         })
     except Exception as e:
         print(f"Erreur dashboard/ventes-recentes: {str(e)}")
-        # Données de démonstration
-        demo_ventes = []
-        now = datetime.now()
-        for i in range(5):
-            demo_ventes.append({
-                'id': i+1,
-                'date_vente': (now - timedelta(minutes=15*i)).isoformat(),
-                'produit': ['Castel Beer', 'Guinness', 'Mützig', 'Tangui', 'Whisky'][i % 5],
-                'quantite': i+1,
-                'prix_unitaire': [600, 900, 650, 300, 4500][i % 5],
-                'total': [600, 900, 650, 300, 4500][i % 5] * (i+1)
-            })
-        return jsonify({
-            'success': True,
-            'ventes': demo_ventes
-        })
+        return jsonify({'success': False, 'ventes': []})
 
 @dashboard_bp.route('/activite-recente', methods=['GET'])
 def get_activite_recente():
@@ -433,60 +344,16 @@ def get_activite_recente():
         activite = [dict(v) for v in ventes] + [dict(a) for a in appros]
         activite.sort(key=lambda x: x['date'], reverse=True)
         
-        # Si pas d'activité, données démo
         if not activite or len(activite) == 0:
-            now = datetime.now()
-            activite = [
-                {
-                    'type': 'vente',
-                    'date': now.isoformat(),
-                    'produit': 'Castel Beer',
-                    'quantite': 3,
-                    'montant': 1800
-                },
-                {
-                    'type': 'vente',
-                    'date': (now - timedelta(minutes=5)).isoformat(),
-                    'produit': 'Guinness',
-                    'quantite': 2,
-                    'montant': 1800
-                },
-                {
-                    'type': 'appro',
-                    'date': (now - timedelta(hours=2)).isoformat(),
-                    'produit': 'Mützig',
-                    'quantite': 24,
-                    'montant': 15600
-                }
-            ]
-        
+            return jsonify({'success': True, 'activite': []})
+            
         return jsonify({
             'success': True,
             'activite': activite[:10]
         })
     except Exception as e:
         print(f"Erreur dashboard/activite-recente: {str(e)}")
-        # Données de démonstration
-        now = datetime.now()
-        return jsonify({
-            'success': True,
-            'activite': [
-                {
-                    'type': 'vente',
-                    'date': now.isoformat(),
-                    'produit': 'Castel Beer',
-                    'quantite': 3,
-                    'montant': 1800
-                },
-                {
-                    'type': 'vente',
-                    'date': (now - timedelta(minutes=5)).isoformat(),
-                    'produit': 'Guinness',
-                    'quantite': 2,
-                    'montant': 1800
-                }
-            ]
-        })
+        return jsonify({'success': False, 'activite': []})
 
 @dashboard_bp.route('/bilan', methods=['GET'])
 def get_bilan():

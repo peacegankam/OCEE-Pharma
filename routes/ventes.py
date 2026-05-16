@@ -71,9 +71,9 @@ def enregistrer_vente():
             # Enregistrer dans l'historique
             cursor.execute('''
                 INSERT INTO historique_stock 
-                (produit_id, quantite_avant, quantite_apres, type, raison, date_mouvement)
-                VALUES (?, ?, ?, 'vente', 'Vente en caisse', ?)
-            ''', (produit_id, produit['stock'], produit['stock'] - quantite, date_actuelle))
+                (produit_id, quantite_avant, quantite_apres, type, raison, date_mouvement, utilisateur_id)
+                VALUES (?, ?, ?, 'vente', 'Vente en caisse', ?, ?)
+            ''', (produit_id, produit['stock'], produit['stock'] - quantite, date_actuelle, vendeur_id))
             
             total_vente += quantite * prix_final
             total_benefice += quantite * (prix_final - produit['prix_achat'])
@@ -85,7 +85,8 @@ def enregistrer_vente():
             'success': True,
             'message': f'{len(ventes)} vente(s) enregistrée(s)',
             'total': total_vente,
-            'benefice': total_benefice
+            'benefice': total_benefice,
+            'date_vente': date_actuelle
         })
         
     except Exception as e:
@@ -97,43 +98,104 @@ def get_ventes_aujourdhui():
     try:
         conn = get_db()
         cursor = conn.cursor()
-        
         today = datetime.now().date()
-        
-        # Récupérer toutes les ventes du jour
+
         cursor.execute('''
-            SELECT v.*, p.nom, p.societe, 
-                   strftime('%H:%M', REPLACE(v.date_vente, 'T', ' ')) as heure
+            SELECT v.id, v.produit_id, v.quantite, v.prix_unitaire, v.date_vente,
+                   p.nom, p.societe, p.prix_achat
             FROM ventes v
             JOIN produits p ON v.produit_id = p.id
-            WHERE DATE(REPLACE(v.date_vente, 'T', ' ')) = ?
+            WHERE DATE(v.date_vente) = ?
             ORDER BY v.date_vente DESC
         ''', (today.isoformat(),))
-        
-        ventes = cursor.fetchall()
-        
-        # Calculer les totaux
-        cursor.execute('''
-            SELECT 
-                COUNT(*) as nb_ventes,
-                COALESCE(SUM(v.quantite * v.prix_unitaire), 0) as total,
-                COALESCE(SUM(v.quantite * (v.prix_unitaire - p.prix_achat)), 0) as benefice
-            FROM ventes v
-            JOIN produits p ON v.produit_id = p.id
-            WHERE DATE(REPLACE(v.date_vente, 'T', ' ')) = ?
-        ''', (today.isoformat(),))
-        
-        totals = cursor.fetchone()
+        rows = cursor.fetchall()
+
+        ventes = []
+        total = 0
+        benefice = 0
+        for r in rows:
+            d = dict(r)
+            d['heure'] = str(d['date_vente'])[11:16]
+            d['total'] = d['quantite'] * d['prix_unitaire']
+            total += d['total']
+            benefice += d['quantite'] * (d['prix_unitaire'] - d['prix_achat'])
+            ventes.append(d)
+
         conn.close()
-        
         return jsonify({
             'success': True,
-            'nb_ventes': totals['nb_ventes'],
-            'total': totals['total'],
-            'benefice': totals['benefice'],
-            'ventes': [dict(v) for v in ventes]
+            'nb_ventes': len(ventes),
+            'total': total,
+            'benefice': benefice,
+            'ventes': ventes
         })
-        
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@ventes_bp.route('/filtres', methods=['GET'])
+def get_ventes_filtres():
+    """Retourne les ventes avec filtres avancés"""
+    try:
+        periode  = request.args.get('periode', 'jour')   # jour|semaine|mois|tout
+        produit  = request.args.get('produit', '')        # recherche texte
+        qte_op   = request.args.get('qte_op', '')         # >|<|=
+        qte_val  = request.args.get('qte_val', '', type=str)
+
+        conn = get_db()
+        cursor = conn.cursor()
+
+        # Condition de période
+        today = datetime.now().date()
+        if periode == 'jour':
+            date_debut = today.isoformat()
+            date_fin   = today.isoformat()
+        elif periode == 'semaine':
+            date_debut = (today - timedelta(days=6)).isoformat()
+            date_fin   = today.isoformat()
+        elif periode == 'mois':
+            date_debut = today.replace(day=1).isoformat()
+            date_fin   = today.isoformat()
+        else:  # tout
+            date_debut = '2000-01-01'
+            date_fin   = today.isoformat()
+
+        # Construction de la requête SQL
+        conditions = ['DATE(v.date_vente) BETWEEN ? AND ?']
+        params = [date_debut, date_fin]
+
+        if produit:
+            conditions.append('LOWER(p.nom) LIKE ?')
+            params.append(f'%{produit.lower()}%')
+
+        if qte_op in ('>', '<', '=') and qte_val.isdigit():
+            conditions.append(f'v.quantite {qte_op} ?')
+            params.append(int(qte_val))
+
+        where_clause = ' AND '.join(conditions)
+
+        cursor.execute(f'''
+            SELECT v.id, v.quantite, v.prix_unitaire, v.date_vente,
+                   p.nom, p.societe, p.prix_achat
+            FROM ventes v
+            JOIN produits p ON v.produit_id = p.id
+            WHERE {where_clause}
+            ORDER BY v.date_vente DESC
+        ''', params)
+
+        rows = cursor.fetchall()
+        ventes = []
+        total = 0
+        for r in rows:
+            d = dict(r)
+            d['heure'] = str(d['date_vente'])[11:16]
+            d['date'] = str(d['date_vente'])[:10]
+            d['total'] = d['quantite'] * d['prix_unitaire']
+            total += d['total']
+            ventes.append(d)
+
+        conn.close()
+        return jsonify({'success': True, 'ventes': ventes, 'total': total, 'nb': len(ventes)})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 

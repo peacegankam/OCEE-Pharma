@@ -129,11 +129,12 @@
             <h3><i class="fas fa-boxes-stacked"></i> Stocks critiques</h3>
             <div class="table-actions">
                 <span class="badge-count" id="badge-critiques-header">0 produit(s)</span>
-                <button class="btn-refresh-small" onclick="chargerStocksCritiques()"><i class="fas fa-sync"></i></button>
+                <button class="btn-refresh-small" onclick="chargerStocksCritiques()"><i
+                        class="fas fa-sync"></i></button>
             </div>
         </div>
 
-        <div class="table-responsive">
+        <div class="table-responsive" id="table-stocks-critiques-container">
             <table class="data-table" id="table-stocks-critiques">
                 <thead>
                     <tr>
@@ -167,13 +168,12 @@
             </div>
         </div>
 
-        <!-- Alertes rapides -->
         <div class="activity-card">
             <div class="activity-header">
                 <h3><i class="fas fa-triangle-exclamation"></i> Alertes rapides</h3>
                 <a href="/stocks" class="btn-link">Gérer stocks <i class="fas fa-arrow-right"></i></a>
             </div>
-            <div class="alert-list" id="alertes-rapides">
+            <div class="alert-list" id="alertes-rapides" style="overflow-y:auto; max-height:170px;">
                 <div class="alert-item loading">Chargement...</div>
             </div>
         </div>
@@ -220,44 +220,19 @@
                 if (data.success && data.ventes) {
                     afficherDernieresVentes(data.ventes);
                 } else {
-                    // Données de démonstration
-                    afficherDernieresVentesDemo();
+                    afficherDernieresVentes([]);
                 }
             })
-            .catch(() => afficherDernieresVentesDemo());
+            .catch(() => afficherDernieresVentes([]));
 
-        // Alertes ruptures/stock bas
-        const fetchStocks = fetch('/api/dashboard/stocks-critiques')
-            .then(response => response.json());
-
-        // Alertes péremption
-        const fetchPeremptions = fetch('/api/dashboard/peremptions-critiques')
-            .then(response => response.json());
-
-        Promise.all([fetchStocks, fetchPeremptions])
-            .then(([stocksData, perData]) => {
-                const stocks = (stocksData && stocksData.success && stocksData.stocks) ? stocksData.stocks : [];
-                const peremptions = (perData && perData.success && perData.produits) ? perData.produits : [];
-
-                // Normaliser les objets pour réutiliser afficherAlertesRapides
-                const perAsStocks = peremptions.map(p => ({
-                    nom: p.nom,
-                    societe: p.societe,
-                    quantite: p.quantite,
-                    seuil_alerte: p.seuil_alerte,
-                    niveau: p.niveau,
-                    date_peremption: p.date_peremption,
-                    jours_restants: p.jours_restants
-                }));
-
-                const merged = [...stocks, ...perAsStocks];
-                if (merged.length > 0) {
-                    afficherAlertesRapides(merged);
-                } else {
-                    afficherAlertesRapidesDemo();
-                }
+        // Alertes consolidées (ruptures, stock bas, péremption)
+        fetch('/api/dashboard/stocks-critiques')
+            .then(response => response.json())
+            .then(data => {
+                const stocks = (data && data.success && data.stocks) ? data.stocks : [];
+                afficherAlertesRapides(stocks);
             })
-            .catch(() => afficherAlertesRapidesDemo());
+            .catch(() => afficherAlertesRapides([]));
     }
 
     function afficherDernieresVentes(ventes) {
@@ -285,37 +260,7 @@
         }).join('');
     }
 
-    function afficherDernieresVentesDemo() {
-        const container = document.getElementById('dernieres-ventes');
-        if (!container) return;
 
-        container.innerHTML = `
-            <div class="activity-item">
-                <div class="activity-icon">💊</div>
-                <div class="activity-details">
-                    <div class="activity-title">Amoxicilline 500mg</div>
-                    <div class="activity-meta">15:30 · 1 articles</div>
-                </div>
-                <div class="activity-amount">2 500 FCFA</div>
-            </div>
-            <div class="activity-item">
-                <div class="activity-icon">💊</div>
-                <div class="activity-details">
-                    <div class="activity-title">Paracétamol 500mg</div>
-                    <div class="activity-meta">15:15 · 5 articles</div>
-                </div>
-                <div class="activity-amount">2 500 FCFA</div>
-            </div>
-            <div class="activity-item">
-                <div class="activity-icon">💊</div>
-                <div class="activity-details">
-                    <div class="activity-title">Vitamine C 1000mg</div>
-                    <div class="activity-meta">14:50 · 2 articles</div>
-                </div>
-                <div class="activity-amount">5 600 FCFA</div>
-            </div>
-        `;
-    }
 
     function afficherAlertesRapides(stocks) {
         const container = document.getElementById('alertes-rapides');
@@ -326,59 +271,23 @@
             return;
         }
 
-        container.innerHTML = stocks.slice(0, 6).map(s => {
-            // Si c'est une alerte de péremption, on utilise le champ niveau
-            const isPeremption = (s.date_peremption || s.jours_restants !== undefined);
-            let niveau = s.niveau;
-
-            if (!niveau) {
-                niveau = s.quantite === 0 ? 'critique' :
-                    s.quantite <= s.seuil_alerte / 2 ? 'critique' : 'faible';
-            }
-
-            const meta = isPeremption
-                ? `Péremption: ${s.date_peremption} (${s.jours_restants}j restants)`
-                : `Stock: ${s.quantite} / Seuil: ${s.seuil_alerte}`;
-
+        container.innerHTML = stocks.map(s => {
+            const level = s.niveau || 'faible';
+            const icon = s.type_alerte === 'peremption' ? '📅' : (s.type_alerte === 'rupture' ? '🚫' : '⚠️');
+            
             return `
-                <div class="alert-item ${niveau}">
-                    <div class="alert-icon">${niveau === 'critique' ? '🔴' : '⚠️'}</div>
+                <div class="alert-item ${level}">
+                    <div class="alert-icon">${icon}</div>
                     <div class="alert-content">
                         <div class="alert-title">${s.nom}</div>
-                        <div class="alert-meta">${meta}</div>
+                        <div class="alert-meta">${s.message} &bull; ${s.societe}</div>
                     </div>
                 </div>
             `;
         }).join('');
     }
 
-    function afficherAlertesRapidesDemo() {
-        const container = document.getElementById('alertes-rapides');
-        if (!container) return;
 
-        container.innerHTML = `
-            <div class="alert-item critique">
-                <div class="alert-icon">🔴</div>
-                <div class="alert-content">
-                    <div class="alert-title">Amoxicilline 500mg</div>
-                    <div class="alert-meta">Stock: 2 / Seuil: 20</div>
-                </div>
-            </div>
-            <div class="alert-item critique">
-                <div class="alert-icon">🔴</div>
-                <div class="alert-content">
-                    <div class="alert-title">Tensiomètre Brassard</div>
-                    <div class="alert-meta">Stock: 1 / Seuil: 5</div>
-                </div>
-            </div>
-            <div class="alert-item faible">
-                <div class="alert-icon">⚠️</div>
-                <div class="alert-content">
-                    <div class="alert-title">Ibuprofène 400mg</div>
-                    <div class="alert-meta">Stock: 10 / Seuil: 30</div>
-                </div>
-            </div>
-        `;
-    }
+
 </script>
 {% endblock %}

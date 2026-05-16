@@ -5,25 +5,52 @@
 
 {% block content %}
 
-<!-- ── Sélecteur de date ── -->
+<!-- ── Sélecteurs de Rapports ── -->
 <div class="card mb-1">
+    <div class="card-header">
+        <h3 class="card-title">Génération de Rapports</h3>
+    </div>
     <div class="card-body">
-        <div class="controls-row">
-            <div class="control-group">
-                <label>Date du rapport</label>
-                <input type="date" id="rapport-date" />
-            </div>
-            <div class="control-group align-bottom">
-                <div class="btn-group">
-                    <button class="btn btn-ghost btn-sm" onclick="setDateRapport('today')">Aujourd'hui</button>
-                    <button class="btn btn-ghost btn-sm" onclick="setDateRapport('yesterday')">Hier</button>
+        <div style="display: flex; gap: 2rem; flex-wrap: wrap;">
+            
+            <!-- Rapport Journalier -->
+            <div style="flex: 1; min-width: 300px; padding-right: 1rem; border-right: 1px solid var(--border-color);">
+                <h4>Rapport Journalier</h4>
+                <div class="controls-row mt-1">
+                    <div class="control-group">
+                        <label>Date du rapport</label>
+                        <input type="date" id="rapport-date" />
+                    </div>
+                    <div class="control-group align-bottom">
+                        <div class="btn-group">
+                            <button class="btn btn-ghost btn-sm" onclick="setDateRapport('today')">Aujourd'hui</button>
+                            <button class="btn btn-ghost btn-sm" onclick="setDateRapport('yesterday')">Hier</button>
+                        </div>
+                    </div>
+                    <div class="control-group align-bottom">
+                        <button class="btn btn-primary" onclick="genererRapport()">
+                             Générer
+                        </button>
+                    </div>
                 </div>
             </div>
-            <div class="control-group align-bottom">
-                <button class="btn btn-primary" onclick="genererRapport()">
-                     Générer le Rapport
-                </button>
+
+            <!-- Rapport Mensuel -->
+            <div style="flex: 1; min-width: 300px;">
+                <h4>Bilan Mensuel</h4>
+                <div class="controls-row mt-1">
+                    <div class="control-group">
+                        <label>Mois</label>
+                        <input type="month" id="rapport-mois" />
+                    </div>
+                    <div class="control-group align-bottom">
+                        <button class="btn btn-primary" onclick="telechargerMensuel()">
+                             📥 Télécharger PDF
+                        </button>
+                    </div>
+                </div>
             </div>
+
         </div>
     </div>
 </div>
@@ -194,6 +221,19 @@
         const d = new Date();
         if (quand === 'yesterday') d.setDate(d.getDate() - 1);
         document.getElementById('rapport-date').value = d.toISOString().slice(0, 10);
+        
+        // Initialiser aussi le champ mois
+        document.getElementById('rapport-mois').value = d.toISOString().slice(0, 7);
+    }
+
+    function telechargerMensuel() {
+        const val = document.getElementById('rapport-mois').value; // YYYY-MM
+        if (!val) {
+            afficherNotif('Veuillez sélectionner un mois', 'warning');
+            return;
+        }
+        const [annee, mois] = val.split('-');
+        window.location.href = `/api/rapports/mensuel?annee=${annee}&mois=${mois}`;
     }
 
     function genererRapport() {

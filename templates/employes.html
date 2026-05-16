@@ -25,8 +25,8 @@
                         </select>
                     </div>
                     <div class="form-group">
-                        <label>Code PIN (pour admin)</label>
-                        <input type="password" id="emp-pin" name="code_pin" maxlength="4" placeholder="Optionnel pour vendeur" />
+                        <label>Mot de passe / PIN</label>
+                        <input type="password" id="emp-pin" name="code_pin" placeholder="Optionnel pour vendeur, Obligatoire pour admin" />
                     </div>
                     <button type="submit" class="btn btn-primary btn-full">
                         Créer le Compte
@@ -41,7 +41,7 @@
             </div>
             <div class="card-body">
                 <p class="text-sm text-muted">
-                    Les administrateurs ont besoin d'un PIN pour se connecter. Les vendeurs n'en ont pas besoin par défaut.
+                    Les administrateurs ont besoin d'un mot de passe pour se connecter. Les vendeurs peuvent également en avoir un pour sécuriser leur compte.
                 </p>
             </div>
         </div>
@@ -53,8 +53,8 @@
             <div class="card-header">
                 <span class="card-title">👥 Comptes Utilisateurs</span>
             </div>
-            <div class="card-body p0">
-                <table class="data-table">
+            <div class="card-body p0" id="table-employes-container">
+                <table class="data-table" id="table-employes">
                     <thead>
                         <tr>
                             <th>Nom</th>
@@ -65,23 +65,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% for user in utilisateurs %}
-                        <tr>
-                            <td class="bold">{{ user.nom }}</td>
-                            <td>
-                                <span class="badge {% if user.role == 'admin' %}badge-sabc{% else %}badge-guinness{% endif %}">
-                                    {{ user.role|upper }}
-                                </span>
-                            </td>
-                            <td>{{ user.nb_ventes }}</td>
-                            <td class="bold text-green">{{ user.total_vendu|int }} FCFA</td>
-                            <td>
-                                <button class="btn btn-ghost btn-sm text-red btn-delete-user" data-id="{{ user.id }}" data-nom="{{ user.nom }}">
-                                    🗑️
-                                </button>
-                            </td>
-                        </tr>
-                        {% endfor %}
+                        <!-- Rendu par JS -->
                     </tbody>
                 </table>
             </div>
@@ -92,6 +76,32 @@
 
 {% block scripts %}
 <script>
+    // Les données sont injectées depuis Jinja
+    const employesData = {{ utilisateurs | tojson | safe }};
+
+    document.addEventListener('DOMContentLoaded', () => {
+        setupPagination('table-employes-container', employesData, function(pageData) {
+            const tbody = document.querySelector('#table-employes tbody');
+            tbody.innerHTML = pageData.map(user => `
+                <tr>
+                    <td class="bold">${user.nom}</td>
+                    <td>
+                        <span class="badge ${user.role === 'admin' ? 'badge-sabc' : 'badge-guinness'}">
+                            ${user.role.toUpperCase()}
+                        </span>
+                    </td>
+                    <td>${user.nb_ventes || 0}</td>
+                    <td class="bold text-green">${formaterFCFA(user.total_vendu || 0)}</td>
+                    <td>
+                        <button class="btn btn-ghost btn-sm text-red btn-delete-user" data-id="${user.id}" data-nom="${user.nom}">
+                            🗑️
+                        </button>
+                    </td>
+                </tr>
+            `).join('') || '<tr><td colspan="5" class="table-empty">Aucun employé trouvé</td></tr>';
+        }, 10);
+    });
+
     document.getElementById('form-employe').addEventListener('submit', function(e) {
         e.preventDefault();
         const data = {
@@ -108,8 +118,9 @@
         .then(r => r.json())
         .then(res => {
             if (res.success) {
-                afficherNotif('Compte créé avec succès', 'success');
-                location.reload();
+                showSuccessModal('Création réussie', 'Compte créé avec succès', () => {
+                    location.reload();
+                });
             } else {
                 afficherNotif(res.message, 'error');
             }
@@ -124,33 +135,26 @@
         const id = btn.dataset.id;
         const nom = btn.dataset.nom;
         
-        alert("Clic sur suppression de : " + nom);
-        
-        console.log("Suppression demandée pour:", id, nom);
-        if (!confirm(`Supprimer le compte de ${nom} ?`)) {
-            console.log("Suppression annulée par l'utilisateur");
-            return;
-        }
-        
-        // alert("Envoi de la requête DELETE à /admin/api/employes/" + id);
-        fetch(`/admin/api/employes/${id}`, { method: 'DELETE' })
-        .then(r => {
-            if (!r.ok) {
-                alert("Erreur serveur : " + r.status);
-                throw new Error("Erreur serveur " + r.status);
-            }
-            return r.json();
-        })
-        .then(res => {
-            if (res.success) {
-                alert('Compte supprimé avec succès !');
-                location.reload();
-            } else {
-                alert("Échec : " + res.message);
-            }
-        })
-        .catch(err => {
-            alert("Erreur de connexion : " + err.message);
+        showConfirmModal('Suppression', `Voulez-vous vraiment supprimer le compte de ${nom} ?`, () => {
+            fetch(`/admin/api/employes/${id}`, { method: 'DELETE' })
+            .then(r => {
+                if (!r.ok) {
+                    throw new Error("Erreur serveur " + r.status);
+                }
+                return r.json();
+            })
+            .then(res => {
+                if (res.success) {
+                    showSuccessModal('Compte supprimé', 'Le compte a été supprimé avec succès.', () => {
+                        location.reload();
+                    });
+                } else {
+                    afficherNotif("Échec : " + res.message, 'error');
+                }
+            })
+            .catch(err => {
+                afficherNotif("Erreur de connexion : " + err.message, 'error');
+            });
         });
     });
 </script>

@@ -204,14 +204,23 @@ function chargerStocksCritiques() {
       if (badge) badge.textContent = total + ' produit(s)';
       if (badgeHeader) badgeHeader.textContent = total + ' produit(s)';
 
-      tbody.innerHTML = data.stocks.map(p => `
-        <tr>
-          <td><strong>${p.nom}</strong></td>
-          <td>${badgeSociete(p.societe)}</td>
-          <td><strong style="color:var(--red)">${p.quantite}</strong></td>
-          <td>${p.seuil_alerte}</td>
-          <td>${etatStock(p.quantite, p.seuil_alerte)}</td>
-        </tr>`).join('');
+      setupPagination('table-stocks-critiques-container', data.stocks, function(pageData) {
+        tbody.innerHTML = pageData.map(p => {
+          const qty = p.quantite !== undefined ? p.quantite : '—';
+          const seuil = p.seuil_alerte !== undefined ? p.seuil_alerte : '—';
+          const isRupture = p.type_alerte === 'rupture' || qty === 0;
+          const isPeremption = p.type_alerte === 'peremption';
+          
+          return `
+          <tr>
+            <td><strong>${p.nom}</strong></td>
+            <td>${badgeSociete(p.societe)}</td>
+            <td><strong style="color:${isRupture ? 'var(--red)' : 'inherit'}">${qty}</strong></td>
+            <td>${seuil}</td>
+            <td>${isPeremption ? `<span style="color:${p.niveau === 'critique' ? 'var(--red)' : 'var(--yellow)'}">${p.message}</span>` : etatStock(qty, seuil)}</td>
+          </tr>`;
+        }).join('');
+      }, 10);
     })
     .catch(() => {});
 }

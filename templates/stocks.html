@@ -34,7 +34,7 @@
                         <div class="btn-group-toggle">
                             <input type="radio" name="type" value="ajout" id="type-entree" checked />
                             <label for="type-entree" class="label-green">Entrée (+)</label>
-                            
+
                             <input type="radio" name="type" value="retrait" id="type-sortie" />
                             <label for="type-sortie" class="label-red">Sortie (−)</label>
                         </div>
@@ -47,7 +47,8 @@
 
                     <div class="form-group">
                         <label>Raison / Note</label>
-                        <textarea id="ajust-raison" name="raison" placeholder="ex: Correction inventaire, Casse, etc."></textarea>
+                        <textarea id="ajust-raison" name="raison"
+                            placeholder="ex: Correction inventaire, Casse, etc."></textarea>
                     </div>
 
                     <button type="submit" class="btn btn-primary btn-full">
@@ -75,7 +76,10 @@
         <div class="card">
             <div class="card-header">
                 <span class="card-title">📜 Journal des Mouvements</span>
-                <div class="header-actions">
+                <div class="header-actions" style="display:flex; gap:.6rem; align-items:center;">
+                    <input type="text" id="search-stock" placeholder="🔍 Rechercher un produit..."
+                        oninput="filtrerHistorique()"
+                        style="background:var(--bg-dark); border:1px solid var(--border-color); border-radius:7px; padding:6px 10px; color:var(--text-light); font-size:12px; width:200px;">
                     <button class="btn btn-ghost btn-sm" onclick="chargerHistoriqueStock()">⟳ Actualiser</button>
                 </div>
             </div>
@@ -117,7 +121,7 @@
         const data = await res.json();
         if (data.success) {
             const select = document.getElementById('ajust-produit');
-            select.innerHTML = '<option value="">— Choisir —</option>' + 
+            select.innerHTML = '<option value="">— Choisir —</option>' +
                 data.produits.map(p => `<option value="${p.id}" data-stock="${p.stock_actuel}">${p.nom}</option>`).join('');
         }
     }
@@ -134,12 +138,27 @@
         }
     }
 
+    let _tousLesMovements = [];
+
     async function chargerHistoriqueStock() {
         const res = await fetch('/api/stocks/historique');
         const data = await res.json();
-        const tbody = document.querySelector('#table-mouvements-stock tbody');
         if (data.success) {
-            tbody.innerHTML = data.mouvements.map(h => `
+            _tousLesMovements = data.mouvements;
+            afficherHistorique(_tousLesMovements);
+        }
+    }
+
+    function filtrerHistorique() {
+        const q = (document.getElementById('search-stock')?.value || '').toLowerCase();
+        const filtres = q ? _tousLesMovements.filter(h => (h.produit || '').toLowerCase().includes(q)) : _tousLesMovements;
+        afficherHistorique(filtres);
+    }
+
+    function afficherHistorique(mouvements) {
+        setupPagination('table-mouvements-stock', mouvements, function (pageData) {
+            const tbody = document.querySelector('#table-mouvements-stock tbody');
+            tbody.innerHTML = pageData.map(h => `
                 <tr>
                     <td class="text-sm">${new Date(h.date_mouvement).toLocaleString()}</td>
                     <td class="bold">${h.produit}</td>
@@ -149,11 +168,16 @@
                         </span>
                     </td>
                     <td class="bold">${h.quantite_apres - h.quantite_avant}</td>
-                    <td><span class="text-sm">Admin</span></td>
+                    <td>
+                        <span class="text-sm">
+                            ${h.auteur_nom || 'Système'} 
+                            ${h.auteur_role ? `<small>(${h.auteur_role})</small>` : ''}
+                        </span>
+                    </td>
                     <td class="text-muted text-sm italic">${h.raison || '—'}</td>
                 </tr>
             `).join('') || '<tr><td colspan="6" class="table-empty">Aucun mouvement</td></tr>';
-        }
+        }, 10);
     }
 
     async function chargerAlertesStocks() {
@@ -175,7 +199,7 @@
 
     function soumettreAjustement(e) {
         e.preventDefault();
-        
+
         const data = {
             produit_id: parseInt(document.getElementById('ajust-produit').value),
             quantite: parseInt(document.getElementById('ajust-quantite').value),
@@ -193,23 +217,24 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
         })
-        .then(r => r.json())
-        .then(res => {
-            if (res.success) {
-                afficherNotif('✅ Stock mis à jour', 'success');
-                e.target.reset();
-                document.getElementById('stock-info-ajust').style.display = 'none';
-                chargerProduitsSelectStock();
-                chargerHistoriqueStock();
-                chargerAlertesStocks();
-            } else {
-                afficherNotif(res.message, 'error');
-            }
-        })
-        .catch(err => {
-            console.error('Erreur:', err);
-            afficherNotif('Erreur lors de l\'envoi', 'error');
-        });
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    showSuccessModal('Stock Ajusté', 'Le stock a été mis à jour avec succès.', () => {
+                        e.target.reset();
+                        document.getElementById('stock-info-ajust').style.display = 'none';
+                        chargerProduitsSelectStock();
+                        chargerHistoriqueStock();
+                        chargerAlertesStocks();
+                    });
+                } else {
+                    afficherNotif(res.message, 'error');
+                }
+            })
+            .catch(err => {
+                console.error('Erreur:', err);
+                afficherNotif('Erreur lors de l\'envoi', 'error');
+            });
     }
 </script>
 {% endblock %}

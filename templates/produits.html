@@ -81,8 +81,9 @@
         <div class="card">
             <div class="card-header">
                 <span class="card-title">📋 Inventaire Complet</span>
-                <div class="header-actions">
-                    <input type="text" id="search-produit" placeholder="Rechercher un produit..." oninput="filtrerTableProduits()" class="input-sm" />
+                <div style="display:flex; align-items:center; gap:.8rem;">
+                    <span id="badge-total-produits" style="background:rgba(193,68,14,0.15); border:1px solid rgba(193,68,14,0.4); border-radius:20px; padding:3px 12px; font-size:12px; color:var(--orange);">0 produit(s)</span>
+                    <input type="text" id="search-produit" placeholder="🔍 Rechercher..." oninput="filtrerTableProduits()" class="input-sm" />
                 </div>
             </div>
             <div class="card-body p0">
@@ -166,31 +167,35 @@
     }
 
     function afficherTableProduits(produits) {
-        const tbody = document.querySelector('#table-produits tbody');
-        tbody.innerHTML = produits.map(p => `
-            <tr id="row-prod-${p.id}">
-                <td class="bold">${p.nom}</td>
-                <td>${badgeSociete(p.societe)}</td>
-                <td>${formaterFCFA(p.prix_vente)}</td>
-                <td>
-                    <span class="stock-pill ${p.stock_actuel <= p.seuil_alerte ? 'stock-low' : ''}">
-                        ${p.stock_actuel}
-                    </span>
-                </td>
-                <td>
-                    <span class="badge ${p.jours_restants !== null && p.jours_restants <= 30 ? 'badge-sabc' : 'badge-guinness'}">
-                        ${p.date_peremption || '—'}
-                    </span>
-                </td>
-                <td>${p.seuil_alerte}</td>
-                <td>
-                    <div class="btn-group">
-                        <button class="btn btn-ghost btn-sm" onclick='editerProduit(${JSON.stringify(p)})'>✏️</button>
-                        <button class="btn btn-ghost btn-sm text-red" onclick="supprimerProduit(${p.id})">🗑️</button>
-                    </div>
-                </td>
-            </tr>
-        `).join('') || '<tr><td colspan="7" class="table-empty">Aucun produit trouvé</td></tr>';
+        const badge = document.getElementById('badge-total-produits');
+        if (badge) badge.textContent = `${produits.length} produit(s) au total`;
+        setupPagination('table-produits', produits, function(pageData) {
+            const tbody = document.querySelector('#table-produits tbody');
+            tbody.innerHTML = pageData.map(p => `
+                <tr id="row-prod-${p.id}">
+                    <td class="bold">${p.nom}</td>
+                    <td>${badgeSociete(p.societe)}</td>
+                    <td>${formaterFCFA(p.prix_vente)}</td>
+                    <td>
+                        <span class="stock-pill ${p.stock_actuel <= p.seuil_alerte ? 'stock-low' : ''}">
+                            ${p.stock_actuel}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge ${p.jours_restants !== null && p.jours_restants <= 30 ? 'badge-sabc' : 'badge-guinness'}">
+                            ${p.date_peremption || '—'}
+                        </span>
+                    </td>
+                    <td>${p.seuil_alerte}</td>
+                    <td>
+                        <div class="btn-group">
+                            <button class="btn btn-ghost btn-sm" onclick='editerProduit(${JSON.stringify(p)})'>✏️</button>
+                            <button class="btn btn-ghost btn-sm text-red" onclick="supprimerProduit(${p.id})">🗑️</button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('') || '<tr><td colspan="7" class="table-empty">Aucun produit trouvé</td></tr>';
+        }, 10);
     }
 
     function soumettreProduit(e) {
@@ -210,9 +215,10 @@
         .then(r => r.json())
         .then(res => {
             if (res.success) {
-                afficherNotif(id ? 'Produit mis à jour' : 'Produit ajouté', 'success');
-                resetFormProduit();
-                chargerProduits();
+                showSuccessModal('Succès', id ? 'Produit mis à jour' : 'Produit ajouté', () => {
+                    resetFormProduit();
+                    chargerProduits();
+                });
             } else {
                 afficherNotif(res.message, 'error');
             }
@@ -251,15 +257,19 @@
     }
 
     function supprimerProduit(id) {
-        if (!confirm('Supprimer ce produit ?')) return;
-        fetch(`/api/produits/${id}`, { method: 'DELETE' })
-            .then(r => r.json())
-            .then(res => {
-                if (res.success) {
-                    afficherNotif('Produit supprimé', 'success');
-                    chargerProduits();
-                }
-            });
+        showConfirmModal('Suppression', 'Voulez-vous vraiment supprimer ce produit ?', () => {
+            fetch(`/api/produits/${id}`, { method: 'DELETE' })
+                .then(r => r.json())
+                .then(res => {
+                    if (res.success) {
+                        showSuccessModal('Supprimé', 'Le produit a été supprimé avec succès.', () => {
+                            chargerProduits();
+                        });
+                    } else {
+                        afficherNotif(res.message, 'error');
+                    }
+                });
+        });
     }
 
     function filtrerTableProduits() {

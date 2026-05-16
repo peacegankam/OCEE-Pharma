@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Connexion - OCEE PHARMA</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         .login-wrapper {
             height: 100vh;
@@ -114,9 +115,14 @@
                 </div>
 
                 <div class="pin-container" id="pin-section">
-                    <div class="form-group">
-                        <label id="pin-label">Code PIN</label>
-                        <input type="password" name="pin" id="pin-input" placeholder="••••" maxlength="4" style="text-align: center; letter-spacing: 10px;">
+                    <div class="form-group" style="position: relative;">
+                        <label id="pin-label">Mot de passe</label>
+                        <div style="position: relative;">
+                            <input type="password" name="pin" id="pin-input" placeholder="Votre mot de passe ou PIN" style="text-align: center; letter-spacing: 5px; width: 100%; padding-right: 40px; border-radius: 8px; border: 1px solid var(--border-color); padding-top: 15px; padding-bottom: 15px; background: var(--bg-dark); color: var(--text-light);">
+                            <button type="button" id="toggle-pwd" style="position: absolute; right: 15px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 16px;">
+                                <i class="fas fa-eye" id="eye-icon"></i>
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -145,7 +151,7 @@
             if (hasPin) {
                 pinSection.style.display = 'block';
                 pinInput.required = true;
-                pinLabel.innerText = role === 'admin' ? 'Code PIN Admin' : 'Code PIN';
+                pinLabel.innerText = role === 'admin' ? 'Mot de passe Admin' : 'Mot de passe';
             } else {
                 pinSection.style.display = 'none';
                 pinInput.required = false;
@@ -154,6 +160,22 @@
             
             btn.style.display = 'block';
         }
+
+        // Script pour afficher/masquer le mot de passe
+        document.getElementById('toggle-pwd').addEventListener('click', function() {
+            const pinInput = document.getElementById('pin-input');
+            const eyeIcon = document.getElementById('eye-icon');
+            
+            if (pinInput.type === 'password') {
+                pinInput.type = 'text';
+                eyeIcon.classList.remove('fa-eye');
+                eyeIcon.classList.add('fa-eye-slash');
+            } else {
+                pinInput.type = 'password';
+                eyeIcon.classList.remove('fa-eye-slash');
+                eyeIcon.classList.add('fa-eye');
+            }
+        });
     </script>
 </body>
 </html>

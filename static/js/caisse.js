@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
     chargerProduitsSelect();
     chargerVentesJour();
     chargerKPIsCaisse();
-    
+
     const formVente = document.getElementById('form-vente');
     if (formVente) {
         formVente.addEventListener('submit', encaisserVente);
@@ -33,14 +33,14 @@ async function chargerProduitsSelect() {
 function remplirSelectProduits(produits) {
     const select = document.getElementById('vente-produit');
     if (!select) return;
-    
+
     const currentVal = select.value;
-    select.innerHTML = '<option value="">— Sélectionner un produit —</option>' + 
+    select.innerHTML = '<option value="">— Sélectionner un produit —</option>' +
         produits.map(p => {
             const stockNote = p.stock_actuel <= 0 ? ' (RUPTURE)' : ` (Stock: ${p.stock_actuel})`;
             return `<option value="${p.id}" ${p.stock_actuel <= 0 ? 'disabled' : ''}>${p.nom}${stockNote}</option>`;
         }).join('');
-    
+
     select.value = currentVal;
 }
 
@@ -57,7 +57,7 @@ function filtrerProduitsVente() {
 function mettreAJourPrixVente() {
     const id = document.getElementById('vente-produit').value;
     const panel = document.getElementById('prix-panel');
-    
+
     if (!id) {
         panel.style.display = 'none';
         currentProduct = null;
@@ -71,7 +71,7 @@ function mettreAJourPrixVente() {
         document.getElementById('prix-unitaire').textContent = formaterMontant(currentProduct.prix_vente) + ' FCFA';
         // Afficher juste la quantité, pas de FCFA
         document.getElementById('stock-dispo').textContent = currentProduct.stock_actuel;
-        
+
         const badge = document.getElementById('stock-dispo');
         if (currentProduct.stock_actuel <= 5) {
             badge.style.color = 'var(--red)';
@@ -80,7 +80,7 @@ function mettreAJourPrixVente() {
             badge.style.color = 'var(--green)';
             badge.style.fontWeight = 'normal';
         }
-        
+
         mettreAJourTotalVente();
     }
 }
@@ -96,12 +96,12 @@ function mettreAJourTotalVente() {
 function ajusterQte(delta) {
     const input = document.getElementById('vente-quantite');
     const newVal = Math.max(1, parseInt(input.value || 1) + delta);
-    
+
     if (currentProduct && newVal > currentProduct.stock_actuel) {
         afficherNotif('Stock insuffisant !', 'warning');
         return;
     }
-    
+
     input.value = newVal;
     mettreAJourTotalVente();
 }
@@ -109,9 +109,9 @@ function ajusterQte(delta) {
 async function encaisserVente(e) {
     e.preventDefault();
     if (!currentProduct) return;
-    
+
     const qte = parseInt(document.getElementById('vente-quantite').value);
-    
+
     if (qte > currentProduct.stock_actuel) {
         afficherNotif('Stock insuffisant pour cette vente', 'error');
         return;
@@ -134,16 +134,17 @@ async function encaisserVente(e) {
         const res = await response.json();
 
         if (res.success) {
-            afficherNotif('✅ Vente enregistrée !', 'success');
             document.getElementById('form-vente').reset();
             document.getElementById('prix-panel').style.display = 'none';
             currentProduct = null;
-            
+
             // Recharger tout
             chargerProduitsSelect();
             chargerVentesJour();
             chargerKPIsCaisse();
             if (typeof chargerGraphVentesHeure === 'function') chargerGraphVentesHeure();
+
+            afficherNotif('&#10003; Vente encaissée avec succès', 'success');
         } else {
             afficherNotif('Erreur : ' + res.message, 'error');
         }
@@ -152,33 +153,99 @@ async function encaisserVente(e) {
     }
 }
 
+// ───── Tableau des ventes avec filtres + pagination ─────
+
+let _toutesLesVentes = [];   // Cache complet
+let _debounceTimer = null;
+
 function chargerVentesJour() {
-    fetch('/api/ventes/aujourdhui')
+    appliquerFiltres();
+}
+
+function appliquerFiltres() {
+    clearTimeout(_debounceTimer);
+    _debounceTimer = setTimeout(_fetchVentes, 300);
+}
+
+function reinitFiltres() {
+    document.getElementById('filtre-periode').value = 'jour';
+    document.getElementById('filtre-produit').value = '';
+    document.getElementById('filtre-qte-op').value = '';
+    document.getElementById('filtre-qte-val').value = '';
+    _fetchVentes();
+}
+
+function _fetchVentes() {
+    const periode = document.getElementById('filtre-periode')?.value || 'jour';
+    const produit = document.getElementById('filtre-produit')?.value || '';
+    const qteOp = document.getElementById('filtre-qte-op')?.value || '';
+    const qteVal = document.getElementById('filtre-qte-val')?.value || '';
+
+    let url = `/api/ventes/filtres?periode=${periode}`;
+    if (produit) url += `&produit=${encodeURIComponent(produit)}`;
+    if (qteOp) url += `&qte_op=${encodeURIComponent(qteOp)}`;
+    if (qteVal !== '') url += `&qte_val=${encodeURIComponent(qteVal)}`;
+
+    // Indicateur chargement
+    const tbody = document.querySelector('#table-ventes-jour tbody');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="empty-table">Chargement...</td></tr>';
+
+    fetch(url)
         .then(r => r.json())
         .then(data => {
-            const tbody = document.querySelector('#table-ventes-jour tbody');
-            if (data.success && data.ventes.length > 0) {
-                tbody.innerHTML = data.ventes.map(v => {
-                    const nom = v.nom || v.produit || '—';
-                    const prixUnit = v.prix_unitaire || 0;
-                    const total = v.quantite * prixUnit;
-                    return `
-                    <tr>
-                        <td>${v.heure || '—'}</td>
-                        <td><strong>${nom}</strong></td>
-                        <td>${badgeSociete(v.societe)}</td>
-                        <td>${v.quantite}</td>
-                        <td>${formaterMontant(prixUnit)} FCFA</td>
-                        <td><strong>${formaterMontant(total)} FCFA</strong></td>
-                    </tr>`;
-                }).join('');
-                document.getElementById('table-total-encaisse').textContent = formaterMontant(data.total) + ' FCFA';
-            } else {
-                tbody.innerHTML = '<tr><td colspan="6" class="empty-table">Aucune vente aujourd\'hui</td></tr>';
-                document.getElementById('table-total-encaisse').textContent = '0 FCFA';
-            }
+            _toutesLesVentes = data.success ? data.ventes : [];
+            const total = data.success ? data.total : 0;
+
+            // Badge et total
+            const badge = document.getElementById('badge-nb-ventes');
+            if (badge) badge.textContent = `${_toutesLesVentes.length} vente(s)`;
+            const totEl = document.getElementById('table-total-encaisse');
+            if (totEl) totEl.textContent = formaterMontant(total) + ' FCFA';
+
+            // Pagination via utils.js
+            setupPagination('ventes-table-container', _toutesLesVentes, _renderVentes, 15);
+        })
+        .catch(() => {
+            if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="empty-table">Erreur de chargement</td></tr>';
         });
 }
+
+function _renderVentes(ventes) {
+    const tbody = document.querySelector('#table-ventes-jour tbody');
+    if (!tbody) return;
+    if (!ventes || ventes.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="empty-table">Aucune vente trouvée</td></tr>';
+        return;
+    }
+    tbody.innerHTML = ventes.map(v => {
+        const nom = v.nom || v.produit || '—';
+        const prix = v.prix_unitaire || 0;
+        const dateVente = v.date_vente || '';
+        return `
+        <tr>
+            <td>${v.date || '—'}</td>
+            <td>${v.heure || '—'}</td>
+            <td><strong>${nom}</strong></td>
+            <td>${badgeSociete(v.societe)}</td>
+            <td>${v.quantite}</td>
+            <td>${formaterMontant(prix)} FCFA</td>
+            <td><strong>${formaterMontant(v.total)} FCFA</strong></td>
+            <td>
+                <button onclick="telechargerFacture(${v.id})"
+                    title="Télécharger le ticket"
+                    style="background:rgba(193,68,14,0.15); border:1px solid rgba(193,68,14,0.4); border-radius:6px; padding:4px 8px; color:var(--orange); cursor:pointer; font-size:12px;">
+                    &#128444; Facture
+                </button>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+function telechargerFacture(venteId) {
+    if (!venteId) { afficherNotif('ID de vente introuvable', 'error'); return; }
+    window.open('/api/rapports/facture?vente_id=' + venteId, '_blank');
+}
+
 
 function chargerKPIsCaisse() {
     fetch('/api/ventes/aujourdhui')

@@ -25,7 +25,7 @@ def rapport_journalier_json():
         # Ventes du jour
         cursor.execute('''
             SELECT 
-                strftime('%H:%M', REPLACE(v.date_vente, 'T', ' ')) as heure,
+                v.date_vente,
                 p.nom as produit,
                 p.societe,
                 v.quantite,
@@ -36,7 +36,11 @@ def rapport_journalier_json():
             WHERE DATE(REPLACE(v.date_vente, 'T', ' ')) = ?
             ORDER BY v.date_vente ASC
         ''', (date_str,))
-        ventes = [dict(row) for row in cursor.fetchall()]
+        ventes = []
+        for row in cursor.fetchall():
+            d = dict(row)
+            d['heure'] = str(d['date_vente'])[11:16]
+            ventes.append(d)
         
         # Totaux ventes
         cursor.execute('''
@@ -54,7 +58,7 @@ def rapport_journalier_json():
         # Approvisionnements du jour
         cursor.execute('''
             SELECT 
-                strftime('%H:%M', a.date_appro) as heure,
+                a.date_appro,
                 p.nom as produit,
                 p.societe,
                 a.quantite,
@@ -64,7 +68,11 @@ def rapport_journalier_json():
             WHERE DATE(a.date_appro) = ?
             ORDER BY a.date_appro ASC
         ''', (date_str,))
-        appros = [dict(row) for row in cursor.fetchall()]
+        appros = []
+        for row in cursor.fetchall():
+            d = dict(row)
+            d['heure'] = str(d['date_appro'])[11:16]
+            appros.append(d)
         
         # Total dépenses appro
         cursor.execute('''
@@ -211,7 +219,7 @@ def rapport_journalier():
             vente_data = [['Heure', 'Produit', 'Qté', 'Prix', 'Total']]
             for v in ventes:
                 vente_data.append([
-                    v['date_vente'][11:16],  # Heure
+                    str(v['date_vente'])[11:16],  # Heure
                     f"{v['nom']} ({v['societe']})",
                     str(v['quantite']),
                     f"{v['prix_unitaire']:,.0f}",
@@ -236,7 +244,7 @@ def rapport_journalier():
             appro_data = [['Heure', 'Produit', 'Qté', 'Prix unit.', 'Total']]
             for a in appros:
                 appro_data.append([
-                    a['date_appro'][11:16],
+                    str(a['date_appro'])[11:16],
                     a['nom'],
                     str(a['quantite']),
                     f"{a['prix_achat_unitaire']:,.0f}",
@@ -553,5 +561,108 @@ def bilan_periode_inner(debut, fin, filename_prefix):
         doc.build(elements)
         buffer.seek(0)
         return send_file(buffer, as_attachment=True, download_name=f"{filename_prefix}_{debut}_au_{fin}.pdf", mimetype='application/pdf')
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@rapports_bp.route('/facture', methods=['GET'])
+def generer_facture():
+    """Génère un ticket de caisse PDF pour une vente donnée (basé sur la date_vente exacte)"""
+    try:
+        vente_id = request.args.get('vente_id')
+        if not vente_id:
+            return jsonify({'success': False, 'message': 'vente_id requis'}), 400
+            
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT v.quantite, v.prix_unitaire, p.nom, (v.quantite * v.prix_unitaire) as total,
+                   u.nom as vendeur, v.date_vente
+            FROM ventes v
+            JOIN produits p ON v.produit_id = p.id
+            LEFT JOIN utilisateurs u ON v.vendeur_id = u.id
+            WHERE v.id = ?
+        ''', (request.args.get('vente_id'),))
+        
+        articles = cursor.fetchall()
+        conn.close()
+        
+        if not articles:
+            return jsonify({'success': False, 'message': 'Aucune vente trouvée à cette date'}), 404
+            
+        vendeur = articles[0]['vendeur'] or 'Caisse'
+        total_general = sum(a['total'] for a in articles)
+        
+        # Format Ticket de caisse (Largeur 8cm = 226 points)
+        from reportlab.lib.pagesizes import mm
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+        
+        page_width = 80 * mm
+        page_height = (100 + len(articles) * 15) * mm # Hauteur dynamique
+        
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=(page_width, page_height),
+                                rightMargin=5*mm, leftMargin=5*mm,
+                                topMargin=5*mm, bottomMargin=5*mm)
+                                
+        styles = getSampleStyleSheet()
+        center_style = ParagraphStyle('Center', parent=styles['Normal'], alignment=TA_CENTER, fontSize=10)
+        bold_center = ParagraphStyle('BoldCenter', parent=styles['Normal'], alignment=TA_CENTER, fontSize=12, fontName='Helvetica-Bold')
+        
+        elements = []
+        
+        # En-tête
+        elements.append(Paragraph("OCEE PHARMA", bold_center))
+        elements.append(Paragraph("Reçu de caisse", center_style))
+        elements.append(Spacer(1, 3*mm))
+        elements.append(Paragraph(f"Date: {date_vente}", center_style))
+        elements.append(Paragraph(f"Vendeur: {vendeur}", center_style))
+        elements.append(Spacer(1, 5*mm))
+        
+        # Articles
+        data = []
+        for a in articles:
+            data.append([
+                Paragraph(f"{a['nom'][:15]}", styles['Normal']), 
+                f"{a['quantite']}x", 
+                f"{a['total']}"
+            ])
+            
+        t = Table(data, colWidths=[35*mm, 10*mm, 25*mm])
+        t.setStyle(TableStyle([
+            ('FONTNAME', (0,0), (-1,-1), 'Helvetica'),
+            ('FONTSIZE', (0,0), (-1,-1), 9),
+            ('ALIGN', (1,0), (2,-1), 'RIGHT'),
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 2),
+        ]))
+        elements.append(t)
+        
+        # Ligne de séparation
+        elements.append(Spacer(1, 3*mm))
+        elements.append(Paragraph("-" * 35, center_style))
+        elements.append(Spacer(1, 3*mm))
+        
+        # Total
+        total_data = [["TOTAL:", f"{total_general:,.0f} FCFA"]]
+        t_total = Table(total_data, colWidths=[35*mm, 35*mm])
+        t_total.setStyle(TableStyle([
+            ('FONTNAME', (0,0), (-1,-1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0,0), (-1,-1), 11),
+            ('ALIGN', (1,0), (1,-1), 'RIGHT'),
+        ]))
+        elements.append(t_total)
+        
+        elements.append(Spacer(1, 8*mm))
+        elements.append(Paragraph("Merci de votre visite !", center_style))
+        
+        doc.build(elements)
+        buffer.seek(0)
+        
+        safe_date = date_vente.replace(':', '-').replace(' ', '_')
+        return send_file(buffer, as_attachment=False, download_name=f"ticket_{safe_date}.pdf", mimetype='application/pdf')
+        
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500

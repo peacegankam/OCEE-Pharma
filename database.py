@@ -24,6 +24,14 @@ class MySQLCursorWrapper:
             # SQLite %w: 0-6 (Dim-Sam) -> MySQL DAYOFWEEK: 1-7 (Dim-Sam)
             query = query.replace("strftime('%w',", "(DAYOFWEEK(")
             query = query.replace("date_vente)", "date_vente) - 1)")
+            
+        # Simplification pour MySQL
+        query = query.replace("DATE(REPLACE(v.date_vente, 'T', ' '))", "DATE(v.date_vente)")
+        query = query.replace("DATE(REPLACE(date_vente, 'T', ' '))", "DATE(date_vente)")
+        if "date('now', '+7 day')" in query:
+            query = query.replace("date('now', '+7 day')", "DATE_ADD(CURDATE(), INTERVAL 7 DAY)")
+        if "date('now', '+30 day')" in query:
+            query = query.replace("date('now', '+30 day')", "DATE_ADD(CURDATE(), INTERVAL 30 DAY)")
         
         # Adaptation pour le type de champ (SQLite INTEGER PRIMARY KEY AUTOINCREMENT)
         if "INTEGER PRIMARY KEY AUTOINCREMENT" in query:
@@ -188,6 +196,7 @@ def init_db():
             quantite_apres INTEGER NOT NULL,
             type VARCHAR(50) NOT NULL,
             raison TEXT,
+            utilisateur_id INTEGER,
             date_mouvement TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
@@ -208,6 +217,10 @@ def migrate_db():
         pass
     try:
         cursor.execute("ALTER TABLE produits ADD COLUMN date_peremption DATE")
+    except Exception:
+        pass
+    try:
+        cursor.execute("ALTER TABLE historique_stock ADD COLUMN utilisateur_id INTEGER")
     except Exception:
         pass
     conn.commit()

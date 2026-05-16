@@ -85,34 +85,88 @@
         </button>
     </div>
 
-    <!-- ── LISTE DES VENTES DU JOUR ── -->
+    <!-- ── TABLEAU DES VENTES ── -->
     <div class="main-panel">
         <div class="card">
             <div class="card-header">
-                <span class="card-title"><i class="fas fa-receipt"></i> Ventes de la journée</span>
+                <span class="card-title"><i class="fas fa-table"></i> Tableau des ventes</span>
+                <span class="card-badge" id="badge-nb-ventes">0 vente(s)</span>
             </div>
-            <div class="card-body p0">
+
+            <!-- Barre de filtres améliorée -->
+            <div style="padding: 1rem 1.2rem; background: rgba(0,0,0,0.15); border-bottom: 1px solid var(--border-color);">
+                <div style="display:grid; grid-template-columns: 1fr 1.5fr auto auto; gap:.8rem; align-items:end;">
+
+                    <!-- Période -->
+                    <div>
+                        <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px; text-transform:uppercase; letter-spacing:.05em;">Période</label>
+                        <select id="filtre-periode" onchange="appliquerFiltres()"
+                            style="width:100%; background:var(--bg-dark); border:1px solid var(--border-color); border-radius:7px; padding:8px 10px; color:var(--text-light); font-size:13px;">
+                            <option value="jour">Aujourd'hui</option>
+                            <option value="semaine">7 derniers jours</option>
+                            <option value="mois">Ce mois</option>
+                            <option value="tout">Tout l'historique</option>
+                        </select>
+                    </div>
+
+                    <!-- Produit -->
+                    <div>
+                        <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px; text-transform:uppercase; letter-spacing:.05em;">Produit</label>
+                        <input type="text" id="filtre-produit" placeholder="🔍 Rechercher un produit..."
+                            oninput="appliquerFiltres()"
+                            style="width:100%; background:var(--bg-dark); border:1px solid var(--border-color); border-radius:7px; padding:8px 10px; color:var(--text-light); font-size:13px; box-sizing:border-box;">
+                    </div>
+
+                    <!-- Quantité -->
+                    <div>
+                        <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px; text-transform:uppercase; letter-spacing:.05em;">Quantité</label>
+                        <div style="display:flex; gap:6px;">
+                            <select id="filtre-qte-op" onchange="appliquerFiltres()"
+                                style="width:58px; background:var(--bg-dark); border:1px solid var(--border-color); border-radius:7px; padding:8px 6px; color:var(--text-light); font-size:14px; text-align:center;">
+                                <option value="">—</option>
+                                <option value=">">&gt;</option>
+                                <option value="<">&lt;</option>
+                                <option value="=">=</option>
+                            </select>
+                            <input type="number" id="filtre-qte-val" min="0" placeholder="0" oninput="appliquerFiltres()"
+                                style="width:70px; background:var(--bg-dark); border:1px solid var(--border-color); border-radius:7px; padding:8px 10px; color:var(--text-light); font-size:13px;">
+                        </div>
+                    </div>
+
+                    <!-- Reset -->
+                    <div>
+                        <button onclick="reinitFiltres()"
+                            style="background:rgba(255,255,255,0.07); border:1px solid var(--border-color); border-radius:7px; padding:8px 14px; color:var(--text-muted); font-size:13px; cursor:pointer; white-space:nowrap;"
+                            onmouseover="this.style.borderColor='var(--orange)';this.style.color='var(--orange)'"
+                            onmouseout="this.style.borderColor='var(--border-color)';this.style.color='var(--text-muted)'">&#8635; Réinit.</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tableau + pagination -->
+            <div id="ventes-table-container" class="card-body p0">
                 <table class="data-table" id="table-ventes-jour">
                     <thead>
                         <tr>
+                            <th>Date</th>
                             <th>Heure</th>
                             <th>Produit</th>
                             <th>Société</th>
                             <th>Qté</th>
                             <th>Prix Unit.</th>
                             <th>Total</th>
+                            <th>Facture</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <tr>
-                            <td colspan="6" class="empty-table">Chargement...</td>
-                        </tr>
+                        <tr><td colspan="8" class="empty-table">Chargement...</td></tr>
                     </tbody>
                 </table>
             </div>
+
             <div class="table-footer">
                 <div class="table-total">
-                    <span>Total encaissé aujourd'hui</span>
+                    <span>Total encaissé</span>
                     <span class="total-value" id="table-total-encaisse">0 FCFA</span>
                 </div>
             </div>

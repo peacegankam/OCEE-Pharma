@@ -197,11 +197,13 @@ def ajuster_stock():
             ''', (produit_id, nouveau, date_actuelle))
         
         # Enregistrer dans l'historique
+        from flask import session
+        utilisateur_id = session.get('user_id')
         cursor.execute('''
             INSERT INTO historique_stock 
-            (produit_id, quantite_avant, quantite_apres, type, raison, date_mouvement)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', (produit_id, ancien, nouveau, type_ajust, raison, date_actuelle))
+            (produit_id, quantite_avant, quantite_apres, type, raison, date_mouvement, utilisateur_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (produit_id, ancien, nouveau, type_ajust, raison, date_actuelle, utilisateur_id))
         
         conn.commit()
         conn.close()
@@ -303,9 +305,12 @@ def get_historique():
             SELECT 
                 h.*,
                 p.nom as produit,
-                p.societe
+                p.societe,
+                u.nom as auteur_nom,
+                u.role as auteur_role
             FROM historique_stock h
             JOIN produits p ON h.produit_id = p.id
+            LEFT JOIN utilisateurs u ON h.utilisateur_id = u.id
             WHERE DATE(h.date_mouvement) >= ?
         '''
         params = [date_limite.isoformat()]
