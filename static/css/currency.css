@@ -1,0 +1,54 @@
+/* ========== GESTION DE LA DEVISE FCFA ========== */
+/* Affiche FCFA seulement sur les montants et prix */
+
+.currency {
+    font-size: 0.85em;
+    color: var(--text-muted, #A8A09A);
+    font-weight: 400;
+    margin-left: 4px;
+}
+
+.kpi-value .currency {
+    font-size: 0.7em;
+    color: var(--text-muted, #A8A09A);
+}
+
+/* Pour les tableaux */
+.prix-vente,
+.prix-achat,
+.montant,
+.total,
+.revenus {
+    font-weight: 600;
+}
+
+.prix-vente .currency,
+.prix-achat .currency,
+.montant .currency,
+.total .currency,
+.revenus .currency {
+    font-weight: 400;
+    font-size: 0.8em;
+    margin-left: 3px;
+}
+
+/* Pour les alertes et KPI */
+.kpi-value {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+}
+
+/* FontAwesome Icons customization */
+.fa-prescription-bottle-medical,
+.fa-pills,
+.fas {
+    font-family: 'Font Awesome 6 Free', 'Font Awesome 6 Pro';
+}
+
+/* Pour compatible avec les anciens emojis */
+[class*="fa-"]:before {
+    display: inline-block;
+    text-rendering: auto;
+    -webkit-font-smoothing: antialiased;
+}

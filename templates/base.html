@@ -12,9 +12,13 @@
 
     <!-- Styles CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/currency.css') }}">
     
     <!-- Chart.js Library -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+    
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     {% block extra_css %}{% endblock %}
 </head>
@@ -24,7 +28,7 @@
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
                 <div class="logo">
-                    <span class="logo-icon">💊</span>
+                    <span class="logo-icon"><i class="fas fa-prescription-bottle-medical"></i></span>
                     <span class="logo-text">OCEE PHARMA</span>
                 </div>
                 <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Toggle sidebar">
@@ -36,66 +40,60 @@
                 <ul>
                     <li>
                         <a href="{{ url_for('index') }}" class="nav-item {% if request.path == url_for('index') %}active{% endif %}">
-                            <span class="nav-icon">📊</span>
+                            <span class="nav-icon"><i class="fas fa-chart-line"></i></span>
                             <span class="nav-text">Tableau de bord</span>
                         </a>
                     </li>
                     <li>
                         <a href="{{ url_for('caisse_page') }}" class="nav-item {% if request.path == url_for('caisse_page') %}active{% endif %}">
-                            <span class="nav-icon">🛒</span>
+                            <span class="nav-icon"><i class="fas fa-cash-register"></i></span>
                             <span class="nav-text">Caisse</span>
                         </a>
                     </li>
                     <li>
                         <a href="{{ url_for('stocks_page') }}" class="nav-item {% if request.path == url_for('stocks_page') %}active{% endif %}">
-                            <span class="nav-icon">📦</span>
+                            <span class="nav-icon"><i class="fas fa-boxes-stacked"></i></span>
                             <span class="nav-text">Stocks</span>
                         </a>
                     </li>
                     <li>
                         <a href="{{ url_for('produits_page') }}" class="nav-item {% if request.path == url_for('produits_page') %}active{% endif %}">
-                            <span class="nav-icon">💊</span>
+                            <span class="nav-icon"><i class="fas fa-pills"></i></span>
                             <span class="nav-text">Produits</span>
                         </a>
                     </li>
                     <li>
                         <a href="{{ url_for('appro_page') }}" class="nav-item {% if request.path == url_for('appro_page') %}active{% endif %}">
-                            <span class="nav-icon">🚚</span>
+                            <span class="nav-icon"><i class="fas fa-truck"></i></span>
                             <span class="nav-text">Approvisionnement</span>
                         </a>
                     </li>
                     {% if session.get('role') == 'admin' %}
                     <li>
                         <a href="{{ url_for('rapport_page') }}" class="nav-item {% if request.path == url_for('rapport_page') %}active{% endif %}">
-                            <span class="nav-icon">📄</span>
+                            <span class="nav-icon"><i class="fas fa-file-contract"></i></span>
                             <span class="nav-text">Rapport Journalier</span>
                         </a>
                     </li>
                     <li>
                         <a href="{{ url_for('bilan_page') }}" class="nav-item {% if request.path == url_for('bilan_page') %}active{% endif %}">
-                            <span class="nav-icon">📈</span>
+                            <span class="nav-icon"><i class="fas fa-chart-bar"></i></span>
                             <span class="nav-text">Bilan Hebdo</span>
                         </a>
                     </li>
                     <li>
                         <a href="{{ url_for('admin.employes_page') }}" class="nav-item {% if request.path == url_for('admin.employes_page') %}active{% endif %}">
-                            <span class="nav-icon">👥</span>
+                            <span class="nav-icon"><i class="fas fa-people-group"></i></span>
                             <span class="nav-text">Personnel</span>
                         </a>
                     </li>
                     <li>
                         <a href="{{ url_for('admin.parametres_page') }}" class="nav-item {% if request.path == url_for('admin.parametres_page') %}active{% endif %}">
-                            <span class="nav-icon">⚙️</span>
+                            <span class="nav-icon"><i class="fas fa-gears"></i></span>
                             <span class="nav-text">Paramètres</span>
                         </a>
                     </li>
                     {% endif %}
-                    <li>
-                        <a href="{{ url_for('tendances_page') }}" class="nav-item {% if request.path == url_for('tendances_page') %}active{% endif %}">
-                            <span class="nav-icon">🚀</span>
-                            <span class="nav-text">Tendances ML</span>
-                        </a>
-                    </li>
                 </ul>
             </nav>
 
@@ -105,7 +103,7 @@
                     <div class="clock-date" id="clock-date">Lundi 1 Janvier</div>
                 </div>
                 <a href="{{ url_for('logout') }}" class="nav-item mt-1 text-red">
-                    <span class="nav-icon">🚪</span>
+                    <span class="nav-icon"><i class="fas fa-door-open"></i></span>
                     <span class="nav-text">Déconnexion</span>
                 </a>
             </div>
@@ -124,7 +122,7 @@
                             {{ session.get('role', 'vendeur') }}
                         </span>
                     </div>
-                    <button class="btn-refresh" onclick="location.reload()">⟳</button>
+                    <button class="btn-refresh" onclick="location.reload()"><i class="fas fa-rotate-right"></i></button>
                 </div>
             </header>
 
@@ -195,6 +193,9 @@
 
         // Formateur FCFA
         function formaterFCFA(montant) {
+            if (montant === null || montant === undefined || isNaN(montant)) {
+                return '—';
+            }
             return new Intl.NumberFormat('fr-FR').format(montant) + ' FCFA';
         }
 

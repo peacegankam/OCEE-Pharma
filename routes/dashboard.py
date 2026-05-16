@@ -22,33 +22,50 @@ def get_kpis():
         # Récupérer les stats depuis la base de données
         stats = get_stats_globales()
         
-        # Si la base est vide, retourner des données de démonstration
-        if not stats or stats.get('revenus_jour') == 0 and stats.get('ventes_jour') == 0:
-            # Données de démonstration
-            return jsonify({
-                'success': True,
-                'revenus_jour': 245500,
-                'ventes_jour': 42,
-                'benefice_jour': 82350,
-                'alertes_stock': 3
-            })
+        # Calculer le nombre d'alertes (stock + péremption)
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        # Alertes stock critiques
+        cursor.execute('''
+            SELECT COUNT(*) as count
+            FROM stocks s
+            JOIN produits p ON s.produit_id = p.id
+            WHERE s.quantite <= p.seuil_alerte
+        ''')
+        row = cursor.fetchone()
+        alertes_stock = row['count'] if row else 0
+        
+        # Alertes péremption critiques (< 7 jours)
+        cursor.execute('''
+            SELECT COUNT(*) as count
+            FROM produits p
+            WHERE p.date_peremption IS NOT NULL
+            AND date(p.date_peremption) <= date('now', '+7 day')
+            AND date(p.date_peremption) >= date('now')
+        ''')
+        row = cursor.fetchone()
+        alertes_peremption = row['count'] if row else 0
+        
+        conn.close()
+        
+        total_alertes = alertes_stock + alertes_peremption
         
         return jsonify({
             'success': True,
             'revenus_jour': stats.get('revenus_jour', 0),
             'ventes_jour': stats.get('ventes_jour', 0),
             'benefice_jour': stats.get('benefice_jour', 0),
-            'alertes_stock': stats.get('alertes_stock', 0)
+            'alertes_stock': total_alertes
         })
     except Exception as e:
         print(f"Erreur dashboard/kpis: {str(e)}")
-        # En cas d'erreur, retourner des données de démonstration
         return jsonify({
             'success': True,
-            'revenus_jour': 245500,
-            'ventes_jour': 42,
-            'benefice_jour': 82350,
-            'alertes_stock': 3
+            'revenus_jour': 0,
+            'ventes_jour': 0,
+            'benefice_jour': 0,
+            'alertes_stock': 0
         })
 
 @dashboard_bp.route('/revenus-semaine', methods=['GET'])
@@ -88,84 +105,59 @@ def get_revenus_semaine_route():
 
 @dashboard_bp.route('/top-produits', methods=['GET'])
 def get_top_produits_route():
-    """Retourne le top 5 des produits"""
+    """Retourne le top 5 des produits par revenus"""
     try:
         limit = request.args.get('limit', 5, type=int)
-        data = get_top_produits(limit)
         
-        # Si pas de données, générer des données de démonstration
-        if not data or len(data) == 0:
-            demo_produits = [
-                {'produit': 'Castel Beer', 'revenus': 125000},
-                {'produit': 'Guinness', 'revenus': 98000},
-                {'produit': 'Mützig', 'revenus': 87000},
-                {'produit': 'Whisky', 'revenus': 65000},
-                {'produit': 'Tangui', 'revenus': 43000}
-            ]
-            return jsonify(demo_produits[:limit])
-        
-        # Filtrer : garder seulement les produits de type 'médicaments'
-        # Dans ce projet : la colonne produits.societe contient la catégorie.
-        # Mais get_top_produits() ne renvoie que {nom/produit, revenus}.
-        # Donc on recalcule ici pour avoir societe.
         conn = get_db()
         cursor = conn.cursor()
         try:
             cursor.execute('''
-                SELECT p.nom as produit,
+                SELECT p.id,
+                       p.nom as produit,
                        p.societe,
+                       SUM(v.quantite) as quantite_vendue,
                        SUM(v.quantite * v.prix_unitaire) as revenus
                 FROM ventes v
                 JOIN produits p ON v.produit_id = p.id
                 GROUP BY p.id, p.nom, p.societe
-                HAVING LOWER(p.societe) = LOWER('Médicaments')
                 ORDER BY revenus DESC
                 LIMIT ?
             ''', (limit,))
             rows = cursor.fetchall()
-            return jsonify([dict(r) for r in rows])
+            data = [dict(r) for r in rows]
         finally:
             conn.close()
+        
+        return jsonify(data)
     except Exception as e:
         print(f"Erreur dashboard/top-produits: {str(e)}")
-        # Données de démonstration
-        return jsonify([
-            {'produit': 'Castel Beer', 'revenus': 125000},
-            {'produit': 'Guinness', 'revenus': 98000},
-            {'produit': 'Mützig', 'revenus': 87000},
-            {'produit': 'Whisky', 'revenus': 65000},
-            {'produit': 'Tangui', 'revenus': 43000}
-        ])
+        return jsonify([])
 
 @dashboard_bp.route('/repartition-societes', methods=['GET'])
 def get_repartition_societes_route():
-    """Retourne la répartition des ventes par société (uniquement médicaments)."""
+    """Retourne la répartition des ventes par société."""
     try:
-        limit_societes = 10
         conn = get_db()
         cursor = conn.cursor()
         try:
             cursor.execute('''
                 SELECT p.societe,
-                       SUM(v.quantite * v.prix_unitaire) as revenus
+                       SUM(v.quantite * v.prix_unitaire) as revenus,
+                       COUNT(*) as nombre_ventes
                 FROM ventes v
                 JOIN produits p ON v.produit_id = p.id
-                WHERE LOWER(p.societe) = LOWER('Médicaments')
-                   OR LOWER(p.societe) LIKE '%m%C3%A9dic%'
                 GROUP BY p.societe
                 ORDER BY revenus DESC
-                LIMIT ?
-            ''', (limit_societes,))
+                LIMIT 10
+            ''')
             rows = cursor.fetchall()
             return jsonify([dict(r) for r in rows])
         finally:
             conn.close()
     except Exception as e:
         print(f"Erreur dashboard/repartition-societes: {str(e)}")
-        # Données de démonstration (médicaments)
-        return jsonify([
-            {'societe': 'Médicaments', 'revenus': 245000}
-        ])
+        return jsonify([])
 
 @dashboard_bp.route('/peremptions-critiques', methods=['GET'])
 def get_peremptions_critiques_route():
@@ -238,47 +230,106 @@ def get_peremptions_critiques_route():
 
 @dashboard_bp.route('/stocks-critiques', methods=['GET'])
 def get_stocks_critiques_route():
-    """Retourne la liste des stocks critiques (uniquement médicaments)."""
+    """Retourne la liste des stocks critiques et alertes de péremption."""
     try:
-        # Recalcul via SQL pour garantir le filtrage médicaments
         conn = get_db()
         cursor = conn.cursor()
+        alertes = []
+        
+        # 1. Alertes stock critique (quantité <= seuil alerte)
         try:
             cursor.execute('''
-                SELECT p.id, p.nom, p.societe, s.quantite, p.seuil_alerte
+                SELECT p.id, p.nom, p.societe, s.quantite, p.seuil_alerte,
+                       'stock_critique' as type_alerte
                 FROM stocks s
                 JOIN produits p ON s.produit_id = p.id
                 WHERE s.quantite <= p.seuil_alerte
-                  AND (LOWER(p.societe) = LOWER('Médicaments')
-                       OR LOWER(p.societe) LIKE '%m%C3%A9dic%')
                 ORDER BY (s.quantite * 1.0 / NULLIF(p.seuil_alerte,0)) ASC
-                LIMIT 10
             ''')
-            rows = cursor.fetchall()
-            stocks = [dict(r) for r in rows]
-        finally:
-            conn.close()
-
-        # Si pas de données, générer des données de démonstration (médicaments)
-        if not stocks:
-            demo_stocks = [
-                {'id': 4, 'nom': 'Amoxicilline 500mg', 'societe': 'Antibiotiques', 'quantite': 2, 'seuil_alerte': 20},
-                {'id': 6, 'nom': 'Ibuprofène 400mg', 'societe': 'Analgésiques', 'quantite': 10, 'seuil_alerte': 30},
-                {'id': 3, 'nom': 'Azithromycine 500mg', 'societe': 'Antibiotiques', 'quantite': 3, 'seuil_alerte': 10},
-            ]
-            return jsonify({'success': True, 'stocks': demo_stocks})
-
-        return jsonify({'success': True, 'stocks': stocks})
+            stocks = cursor.fetchall()
+            for s in stocks:
+                alertes.append({
+                    'id': s['id'],
+                    'nom': s['nom'],
+                    'societe': s['societe'],
+                    'quantite': s['quantite'],
+                    'seuil_alerte': s['seuil_alerte'],
+                    'type_alerte': 'stock_critique',
+                    'message': f"Stock faible: {s['quantite']} / {s['seuil_alerte']}"
+                })
+        except Exception as e:
+            print(f"Erreur récupération stocks critiques: {e}")
+        
+        # 2. Alertes péremption (date <= 30 jours)
+        try:
+            cursor.execute('''
+                SELECT p.id, p.nom, p.societe, s.quantite, p.seuil_alerte,
+                       p.date_peremption, 'peremption' as type_alerte
+                FROM stocks s
+                JOIN produits p ON s.produit_id = p.id
+                WHERE p.date_peremption IS NOT NULL
+                AND date(p.date_peremption) <= date('now', '+30 day')
+                AND date(p.date_peremption) >= date('now')
+                ORDER BY date(p.date_peremption) ASC
+            ''')
+            peremptions = cursor.fetchall()
+            for p in peremptions:
+                try:
+                    dp = datetime.fromisoformat(str(p['date_peremption'])).date() if p['date_peremption'] else None
+                    jours = (dp - datetime.now().date()).days if dp else None
+                    
+                    niveau = 'critique' if jours and jours <= 7 else 'surveillance'
+                    
+                    alertes.append({
+                        'id': p['id'],
+                        'nom': p['nom'],
+                        'societe': p['societe'],
+                        'quantite': p['quantite'],
+                        'seuil_alerte': p['seuil_alerte'],
+                        'type_alerte': 'peremption',
+                        'date_peremption': p['date_peremption'],
+                        'jours_restants': jours,
+                        'niveau': niveau,
+                        'message': f"Péremption: {jours} jours restants"
+                    })
+                except Exception as e:
+                    print(f"Erreur traitement péremption: {e}")
+        except Exception as e:
+            print(f"Erreur récupération péremptions: {e}")
+        
+        # 3. Alertes rupture de stock (quantité = 0)
+        try:
+            cursor.execute('''
+                SELECT p.id, p.nom, p.societe, s.quantite, p.seuil_alerte,
+                       'rupture' as type_alerte
+                FROM stocks s
+                JOIN produits p ON s.produit_id = p.id
+                WHERE s.quantite = 0
+            ''')
+            ruptures = cursor.fetchall()
+            for r in ruptures:
+                alertes.append({
+                    'id': r['id'],
+                    'nom': r['nom'],
+                    'societe': r['societe'],
+                    'quantite': r['quantite'],
+                    'seuil_alerte': r['seuil_alerte'],
+                    'type_alerte': 'rupture',
+                    'message': 'Rupture de stock complète'
+                })
+        except Exception as e:
+            print(f"Erreur récupération ruptures: {e}")
+        
+        conn.close()
+        
+        # Trier par type d'alerte (rupture > critique > surveillance)
+        type_ordre = {'rupture': 0, 'peremption': 1, 'stock_critique': 2}
+        alertes.sort(key=lambda x: (type_ordre.get(x.get('type_alerte'), 3), x.get('message', '')))
+        
+        return jsonify({'success': True, 'stocks': alertes[:20]})
     except Exception as e:
         print(f"Erreur dashboard/stocks-critiques: {str(e)}")
-        # Données de démonstration
-        return jsonify({
-            'success': True,
-            'stocks': [
-                {'id': 4, 'nom': 'Amoxicilline 500mg', 'societe': 'Antibiotiques', 'quantite': 2, 'seuil_alerte': 20},
-                {'id': 6, 'nom': 'Ibuprofène 400mg', 'societe': 'Analgésiques', 'quantite': 10, 'seuil_alerte': 30}
-            ]
-        })
+        return jsonify({'success': True, 'stocks': []})
 
 @dashboard_bp.route('/ventes-recentes', methods=['GET'])
 def get_ventes_recentes():

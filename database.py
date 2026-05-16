@@ -314,12 +314,12 @@ def get_stats_globales():
     revenus_jour = row['total'] if row else 0
     
     cursor.execute('''
-        SELECT COUNT(*) as count
+        SELECT COALESCE(SUM(v.quantite), 0) as total
         FROM ventes v
         WHERE DATE(v.date_vente) = ?
     ''', (today.isoformat(),))
     row = cursor.fetchone()
-    ventes_jour = row['count'] if row else 0
+    ventes_jour = row['total'] if row else 0
     
     cursor.execute('''
         SELECT COALESCE(SUM(v.quantite * (v.prix_unitaire - p.prix_achat)), 0) as benefice

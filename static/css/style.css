@@ -2883,24 +2883,17 @@ body {
     background: rgba(193, 68, 14, 0.05);
 }
 
-/* Colonnes spécifiques */
+/* Colonnes spécifiques : styles généraux sans ajout automatique de FCFA */
 .data-table td:nth-child(4),
 /* Qté */
 .data-table td:nth-child(5),
 /* Coût Total */
 .data-table td:nth-child(6) {
-    /* Coût Unitaire */
     font-weight: 600;
     color: var(--orange);
 }
 
-.data-table td:nth-child(5)::after,
-.data-table td:nth-child(6)::after {
-    content: ' FCFA';
-    font-size: 11px;
-    color: var(--text-muted);
-    margin-left: 2px;
-}
+/* Les libellés FCFA doivent être ajoutés explicitement dans le HTML/JS des colonnes de prix */
 
 /* Badge société dans tableau */
 .societe-badge {
@@ -3867,14 +3860,6 @@ canvas {
     color: var(--orange);
 }
 
-.data-table td:nth-child(2)::after,
-.data-table td:nth-child(4)::after {
-    content: ' FCFA';
-    font-size: 11px;
-    color: var(--text-muted);
-    font-weight: 400;
-}
-
 .data-table td:nth-child(3) {
     font-weight: 600;
 }
@@ -4499,14 +4484,6 @@ canvas {
 .data-table td.bold {
     font-weight: 600;
     color: var(--orange);
-}
-
-.data-table td:nth-child(5)::after,
-.data-table td:last-child::after {
-    content: ' FCFA';
-    font-size: 11px;
-    color: var(--text-muted);
-    font-weight: 400;
 }
 
 /* ===== TABLE FOOTER ===== */

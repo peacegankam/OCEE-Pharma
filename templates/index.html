@@ -10,19 +10,19 @@
     <div class="kpi-grid">
         {% if session.get('role') == 'admin' %}
         <div class="kpi-card">
-            <div class="kpi-icon">💰</div>
+            <div class="kpi-icon"><i class="fas fa-money-bill-wave"></i></div>
             <div class="kpi-content">
                 <div class="kpi-title">Revenus du jour</div>
-                <div class="kpi-value" id="kpi-revenus">0 FCFA</div>
+                <div class="kpi-value"><span id="kpi-revenus">0</span> <span class="currency">FCFA</span></div>
                 <div class="kpi-trend positive">+12% vs hier</div>
             </div>
         </div>
         {% endif %}
 
         <div class="kpi-card">
-            <div class="kpi-icon">📊</div>
+            <div class="kpi-icon"><i class="fas fa-chart-column"></i></div>
             <div class="kpi-content">
-                <div class="kpi-title">Ventes du shift</div>
+                <div class="kpi-title">Ventes du jour</div>
                 <div class="kpi-value" id="kpi-ventes">0</div>
                 <div class="kpi-trend">articles vendus aujourd'hui</div>
             </div>
@@ -30,17 +30,17 @@
 
         {% if session.get('role') == 'admin' %}
         <div class="kpi-card">
-            <div class="kpi-icon">📈</div>
+            <div class="kpi-icon"><i class="fas fa-arrow-trend-up"></i></div>
             <div class="kpi-content">
                 <div class="kpi-title">Bénéfice</div>
-                <div class="kpi-value" id="kpi-benefice">0 FCFA</div>
+                <div class="kpi-value"><span id="kpi-benefice">0</span> <span class="currency">FCFA</span></div>
                 <div class="kpi-trend positive">+8%</div>
             </div>
         </div>
         {% endif %}
 
         <div class="kpi-card">
-            <div class="kpi-icon">⚠️</div>
+            <div class="kpi-icon"><i class="fas fa-bell"></i></div>
             <div class="kpi-content">
                 <div class="kpi-title">Alertes stock</div>
                 <div class="kpi-value" id="kpi-alertes">0</div>
@@ -110,10 +110,10 @@
     <!-- ========== SECTION 3 : TABLEAU DES STOCKS CRITIQUES ========== -->
     <div class="table-card">
         <div class="table-header">
-            <h3>📦 Stocks critiques</h3>
+            <h3><i class="fas fa-boxes-stacked"></i> Stocks critiques</h3>
             <div class="table-actions">
                 <span class="badge-count" id="badge-critiques-header">0 produit(s)</span>
-                <button class="btn-refresh-small" onclick="chargerStocksCritiques()">⟳</button>
+                <button class="btn-refresh-small" onclick="chargerStocksCritiques()"><i class="fas fa-sync"></i></button>
             </div>
         </div>
 
@@ -122,7 +122,7 @@
                 <thead>
                     <tr>
                         <th>Produit</th>
-                        <th>medocs</th>
+                        <th>Catégorie</th>
                         <th>Stock actuel</th>
                         <th>Seuil alerte</th>
                         <th>État</th>
@@ -143,8 +143,8 @@
         <!-- Dernières ventes -->
         <div class="activity-card">
             <div class="activity-header">
-                <h3>🕒 Dernières ventes</h3>
-                <a href="/caisse" class="btn-link">Voir caisse →</a>
+                <h3><i class="fas fa-clock"></i> Dernières ventes</h3>
+                <a href="/caisse" class="btn-link">Voir caisse <i class="fas fa-arrow-right"></i></a>
             </div>
             <div class="activity-list" id="dernieres-ventes">
                 <div class="activity-item loading">Chargement...</div>
@@ -154,8 +154,8 @@
         <!-- Alertes rapides -->
         <div class="activity-card">
             <div class="activity-header">
-                <h3>⚠️ Alertes rapides</h3>
-                <a href="/stocks" class="btn-link">Gérer stocks →</a>
+                <h3><i class="fas fa-triangle-exclamation"></i> Alertes rapides</h3>
+                <a href="/stocks" class="btn-link">Gérer stocks <i class="fas fa-arrow-right"></i></a>
             </div>
             <div class="alert-list" id="alertes-rapides">
                 <div class="alert-item loading">Chargement...</div>

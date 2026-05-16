@@ -94,7 +94,7 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(data => {
                 if (data.success) {
                     if (stockCountSpan) stockCountSpan.textContent = data.total_produits;
-                    if (stockValeurSpan) stockValeurSpan.textContent = formaterFCFA(data.valeur_totale);
+                    if (stockValeurSpan) stockValeurSpan.textContent = formaterMontant(data.valeur_totale || 0) + ' FCFA';
                 }
             })
             .catch(() => afficherNotif('Erreur chargement vue globale', 'error'));
@@ -138,17 +138,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 <tr>
                     <td><strong>${p.nom}</strong></td>
                     <td>${badgeSociete(p.societe)}</td>
-                    <td class="stock-quantite ${stockClass}">${p.quantite}</td>
-                    <td>${p.seuil_alerte}</td>
-                    <td>${p.prix_achat} FCFA</td>
-                    <td>${p.prix_vente} FCFA</td>
-                    <td>${formaterFCFA(p.valeur)}</td>
+                    <td class="stock-quantite ${stockClass}">${p.quantite || '0'}</td>
+                    <td>${p.seuil_alerte || '0'}</td>
+                    <td>${formaterMontant(p.prix_achat || 0)} FCFA</td>
+                    <td>${formaterMontant(p.prix_vente || 0)} FCFA</td>
+                    <td>${formaterMontant(p.valeur || 0)} FCFA</td>
                     <td>
                         <button class="btn-ajuster" data-id="${p.id}" data-nom="${p.nom}" data-stock="${p.quantite}" data-seuil="${p.seuil_alerte}">
-                            ⚡ Ajuster
+                            <i class="fas fa-bolt"></i> Ajuster
                         </button>
                         <button class="btn-commander" data-id="${p.id}" data-nom="${p.nom}">
-                            📦 Commander
+                            <i class="fas fa-box"></i> Commander
                         </button>
                     </td>
                 </tr>

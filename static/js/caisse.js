@@ -67,7 +67,9 @@ function mettreAJourPrixVente() {
     currentProduct = tousLesProduits.find(p => p.id == id);
     if (currentProduct) {
         panel.style.display = 'block';
-        document.getElementById('prix-unitaire').textContent = formaterFCFA(currentProduct.prix_vente);
+        // Afficher le prix unitaire avec FCFA
+        document.getElementById('prix-unitaire').textContent = formaterMontant(currentProduct.prix_vente) + ' FCFA';
+        // Afficher juste la quantité, pas de FCFA
         document.getElementById('stock-dispo').textContent = currentProduct.stock_actuel;
         
         const badge = document.getElementById('stock-dispo');
@@ -87,7 +89,8 @@ function mettreAJourTotalVente() {
     if (!currentProduct) return;
     const qte = parseInt(document.getElementById('vente-quantite').value) || 1;
     const total = qte * currentProduct.prix_vente;
-    document.getElementById('total-vente').textContent = formaterFCFA(total);
+    // Afficher le montant avec FCFA
+    document.getElementById('total-vente').textContent = formaterMontant(total) + ' FCFA';
 }
 
 function ajusterQte(delta) {
@@ -165,11 +168,11 @@ function chargerVentesJour() {
                         <td><strong>${nom}</strong></td>
                         <td>${badgeSociete(v.societe)}</td>
                         <td>${v.quantite}</td>
-                        <td>${formaterFCFA(prixUnit)}</td>
-                        <td><strong>${formaterFCFA(total)}</strong></td>
+                        <td>${formaterMontant(prixUnit)} FCFA</td>
+                        <td><strong>${formaterMontant(total)} FCFA</strong></td>
                     </tr>`;
                 }).join('');
-                document.getElementById('table-total-encaisse').textContent = formaterFCFA(data.total);
+                document.getElementById('table-total-encaisse').textContent = formaterMontant(data.total) + ' FCFA';
             } else {
                 tbody.innerHTML = '<tr><td colspan="6" class="empty-table">Aucune vente aujourd\'hui</td></tr>';
                 document.getElementById('table-total-encaisse').textContent = '0 FCFA';
@@ -182,9 +185,9 @@ function chargerKPIsCaisse() {
         .then(r => r.json())
         .then(data => {
             if (data.success) {
-                document.getElementById('caisse-total').textContent = formaterFCFA(data.total);
-                document.getElementById('caisse-nb').textContent = data.nb_ventes;
-                document.getElementById('caisse-benefice').textContent = formaterFCFA(data.benefice);
+                document.getElementById('caisse-total').textContent = formaterMontant(data.total || 0) + ' FCFA';
+                document.getElementById('caisse-nb').textContent = (data.nb_ventes || 0);
+                document.getElementById('caisse-benefice').textContent = formaterMontant(data.benefice || 0) + ' FCFA';
             }
         });
 }
