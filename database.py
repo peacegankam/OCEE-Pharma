@@ -235,6 +235,15 @@ def init_db():
         )
     ''')
     
+    # Table des fournisseurs
+    cursor.execute(f'''
+        CREATE TABLE IF NOT EXISTS fournisseurs (
+            id {pk_auto},
+            nom VARCHAR(255) NOT NULL UNIQUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
     conn.commit()
     
     migrate_db()
@@ -337,6 +346,19 @@ def insert_test_data_if_empty():
         
         conn.commit()
     
+    # Fournisseurs par défaut
+    try:
+        cursor.execute("SELECT COUNT(*) as count FROM fournisseurs")
+        row_fourn = cursor.fetchone()
+        if row_fourn and row_fourn['count'] == 0:
+            cursor.execute("INSERT INTO fournisseurs (nom) VALUES ('PharmaCentrale')")
+            cursor.execute("INSERT INTO fournisseurs (nom) VALUES ('Laborex')")
+            cursor.execute("INSERT INTO fournisseurs (nom) VALUES ('Ubipharm')")
+            conn.commit()
+            print("Fournisseurs par défaut créés.")
+    except Exception as e:
+        print(f"Erreur insertion fournisseurs: {e}")
+
     cursor.execute("SELECT COUNT(*) as count FROM utilisateurs")
     row_user = cursor.fetchone()
     if row_user and row_user['count'] == 0:

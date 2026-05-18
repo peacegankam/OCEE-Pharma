@@ -30,31 +30,29 @@
                     </div>
 
                     <div class="form-group">
-                        <label>Type d'opération</label>
-                        <select id="ajust-type" name="type" required onchange="changerMotifsAjustement()" style="background: var(--bg-dark); color: var(--text-light); border: 1px solid var(--border-color); border-radius: 7px; padding: 10px; width: 100%;">
-                            <option value="retrait">Retrait anomalie (−)</option>
-                            <option value="correction">Correction inventaire négatif (+)</option>
-                        </select>
-                    </div>
-
-                    <div class="form-group">
                         <label for="ajust-raison-select">Motif précis</label>
-                        <select id="ajust-raison-select" required onchange="remplirRaisonAjustement()" style="background: var(--bg-dark); color: var(--text-light); border: 1px solid var(--border-color); border-radius: 7px; padding: 10px; width: 100%;">
+                        <select id="ajust-raison-select" required onchange="changerMotifsAjustement()" style="background: var(--bg-dark); color: var(--text-light); border: 1px solid var(--border-color); border-radius: 7px; padding: 10px; width: 100%;">
                             <option value="">— Choisir un motif —</option>
                             <option value="Retrait produit périmé">Retrait produit périmé</option>
                             <option value="Casse">Casse</option>
-                            <option value="Vol / Perte">Vol / Perte</option>
+                            <option value="Correction inventaire négatif">Correction inventaire négatif</option>
                         </select>
                     </div>
 
-                    <div class="form-group" style="display: none;">
+                    <div class="form-group">
                         <label>Raison / Note</label>
-                        <textarea id="ajust-raison" name="raison" placeholder="ex: Correction inventaire, Casse, etc."></textarea>
+                        <textarea id="ajust-raison" name="raison" readonly placeholder="La raison est générée automatiquement selon le motif choisi."></textarea>
                     </div>
 
-                    <div class="form-group">
+                    <div class="form-group" id="ajust-quantite-row">
                         <label>Quantité</label>
                         <input type="number" id="ajust-quantite" name="quantite" min="1" value="1" required />
+                    </div>
+
+                    <div class="form-group" id="ajust-lots-perimes" style="display:none;">
+                        <label>Lots périmés à retirer</label>
+                        <div id="ajust-lots-perimes-list" class="lot-list" style="max-height:140px; overflow:auto; padding:10px; border:1px solid var(--border-color); border-radius:10px; background:var(--bg-dark);"></div>
+                        <div class="mt-05 text-muted">Quantité totale périmée: <strong id="ajust-total-perimes">0</strong></div>
                     </div>
 
                     <button type="submit" class="btn btn-primary btn-full">
@@ -89,7 +87,7 @@
                     <button class="btn btn-ghost btn-sm" onclick="chargerHistoriqueStock()">⟳ Actualiser</button>
                 </div>
             </div>
-            <div class="card-body p0">
+            <div class="card-body p0" id="table-mouvements-stock-container">
                 <table class="data-table" id="table-mouvements-stock">
                     <thead>
                         <tr>
@@ -126,22 +124,25 @@
     });
 
     async function chargerProduitsSelectStock() {
-        const res = await fetch('/api/produits/');
+        const res = await fetch('/api/produits/?with_stock=true');
         const data = await res.json();
         if (data.success) {
             const select = document.getElementById('ajust-produit');
             select.innerHTML = '<option value="">— Choisir —</option>' +
-                data.produits.map(p => `<option value="${p.id}" data-stock="${p.stock_actuel}">${p.nom}</option>`).join('');
+                data.produits.map(p => `<option value="${p.id}" data-stock="${p.stock_actuel || 0}">${p.nom}</option>`).join('');
         }
     }
 
-    function chargerInfoStockAjust() {
+    async function chargerInfoStockAjust() {
         const select = document.getElementById('ajust-produit');
         const opt = select.options[select.selectedIndex];
         const panel = document.getElementById('stock-info-ajust');
         if (opt.value) {
             panel.style.display = 'block';
             document.getElementById('ajust-stock-actuel').textContent = opt.dataset.stock;
+            if (document.getElementById('ajust-raison-select').value === 'Retrait produit périmé') {
+                await chargerLotsPerimes();
+            }
         } else {
             panel.style.display = 'none';
         }
@@ -164,34 +165,58 @@
         afficherHistorique(filtres);
     }
 
-    function changerMotifsAjustement() {
-        const type = document.getElementById('ajust-type').value;
-        const selectRaison = document.getElementById('ajust-raison-select');
+    async function changerMotifsAjustement() {
+        const raison = document.getElementById('ajust-raison-select').value;
         const raisonText = document.getElementById('ajust-raison');
-        
-        if (type === 'correction') {
-            selectRaison.innerHTML = '<option value="Correction inventaire négatif">Correction inventaire négatif</option>';
-            selectRaison.value = "Correction inventaire négatif";
-            raisonText.value = "Correction inventaire négatif";
+        const quantiteRow = document.getElementById('ajust-quantite-row');
+        const lotsPerimesContainer = document.getElementById('ajust-lots-perimes');
+        const quantiteField = document.getElementById('ajust-quantite');
+
+        raisonText.value = raison;
+
+        if (raison === 'Retrait produit périmé') {
+            quantiteRow.style.display = 'none';
+            lotsPerimesContainer.style.display = 'block';
+            await chargerLotsPerimes();
         } else {
-            selectRaison.innerHTML = `
-                <option value="">— Choisir un motif —</option>
-                <option value="Retrait produit périmé">Retrait produit périmé</option>
-                <option value="Casse">Casse</option>
-                <option value="Vol / Perte">Vol / Perte</option>
-            `;
-            selectRaison.value = "";
-            raisonText.value = "";
+            quantiteRow.style.display = 'block';
+            lotsPerimesContainer.style.display = 'none';
+            quantiteField.value = '1';
+            document.getElementById('ajust-total-perimes').textContent = '0';
+            document.getElementById('ajust-lots-perimes-list').innerHTML = '';
         }
     }
 
-    function remplirRaisonAjustement() {
-        const selectRaison = document.getElementById('ajust-raison-select');
-        document.getElementById('ajust-raison').value = selectRaison.value;
+    async function chargerLotsPerimes() {
+        const produitId = parseInt(document.getElementById('ajust-produit').value);
+        if (!produitId) {
+            document.getElementById('ajust-lots-perimes-list').innerHTML = "<div class=\"text-muted\">Sélectionnez d'abord un produit.</div>";
+            document.getElementById('ajust-total-perimes').textContent = '0';
+            return;
+        }
+
+        const res = await fetch(`/api/stocks/expired-lots/${produitId}`);
+        const data = await res.json();
+        if (!data.success) {
+            document.getElementById('ajust-lots-perimes-list').innerHTML = `<div class="text-danger">${data.message || 'Erreur de chargement'}</div>`;
+            return;
+        }
+
+        const list = data.lots_perimes || [];
+        document.getElementById('ajust-total-perimes').textContent = data.total_perimes;
+        document.getElementById('ajust-quantite').value = data.total_perimes;
+        document.getElementById('ajust-lots-perimes-list').innerHTML = list.length
+            ? list.map(lot => `
+                <div style="margin-bottom:.5rem;">
+                    <strong>${lot.reference_lot || 'LOT'}</strong> — ${lot.quantite_actuelle} unités<br>
+                    Réception: ${new Date(lot.date_reception).toLocaleDateString()} • Péremption: ${lot.date_peremption}
+                </div>
+            `).join('')
+            : '<div class="text-muted">Aucun lot périmé trouvé.</div>';
     }
 
     function afficherHistorique(mouvements) {
-        setupPagination('table-mouvements-stock', mouvements, function (pageData) {
+        setupPagination('table-mouvements-stock-container', mouvements, function (pageData) {
             const tbody = document.querySelector('#table-mouvements-stock tbody');
             tbody.innerHTML = pageData.map(h => {
                 const diff = h.quantite_apres - h.quantite_avant;
@@ -250,11 +275,10 @@
         const data = {
             produit_id: parseInt(document.getElementById('ajust-produit').value),
             quantite: parseInt(document.getElementById('ajust-quantite').value),
-            type: document.getElementById('ajust-type').value,
             raison: document.getElementById('ajust-raison').value
         };
 
-        if (!data.produit_id || isNaN(data.quantite) || !data.raison) {
+        if (!data.produit_id || !data.raison || (data.raison !== 'Retrait produit périmé' && isNaN(data.quantite))) {
             afficherNotif('Veuillez remplir les champs obligatoires et choisir un motif', 'warning');
             return;
         }

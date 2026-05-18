@@ -24,11 +24,11 @@ def get_produits():
         '''
         params = []
         
-        if societe_filter and societe_filter in SOCIETES:
+        if societe_filter:
             query += ' AND p.societe = ?'
             params.append(societe_filter)
         
-        query += ' ORDER BY p.societe, p.nom'
+        query += ' ORDER BY p.nom ASC'
         
         cursor.execute(query, params)
         produits = cursor.fetchall()
@@ -102,15 +102,16 @@ def create_produit():
             if field not in data:
                 return jsonify({'success': False, 'message': f'Champ manquant: {field}'}), 400
         
-        if data['societe'] not in SOCIETES:
-            return jsonify({'success': False, 'message': 'Société invalide'}), 400
+        societe = data.get('societe', '').strip()
+        if not societe:
+            return jsonify({'success': False, 'message': 'Société manquante'}), 400
         
         seuil = data.get('seuil_alerte', 10)
         
         conn = get_db()
         cursor = conn.cursor()
         
-        # Insertion produit avec prix_achat et prix_vente par défaut à 0
+        # Insertion produit sans prix ni date de péremption ; ces valeurs sont gérées par les lots
         cursor.execute('''
             INSERT INTO produits (nom, societe, prix_achat, prix_vente, seuil_alerte, date_peremption)
             VALUES (?, ?, ?, ?, ?, ?)
@@ -154,12 +155,10 @@ def update_produit(produit_id):
         updates = []
         params = []
         
-        fields = ['nom', 'societe', 'prix_achat', 'prix_vente', 'seuil_alerte', 'date_peremption']
+        fields = ['nom', 'societe', 'seuil_alerte']
         for field in fields:
             if field in data:
                 val = data[field]
-                if field == 'date_peremption' and not val:
-                    val = None
                 updates.append(f"{field} = ?")
                 params.append(val)
         
@@ -221,5 +220,14 @@ def delete_produit(produit_id):
 
 @produits_bp.route('/societes', methods=['GET'])
 def get_societes():
-    """Retourne la liste des sociétés"""
-    return jsonify({'success': True, 'societes': SOCIETES})
+    """Retourne la liste des sociétés/familles"""
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('SELECT DISTINCT societe FROM produits WHERE societe IS NOT NULL AND societe != "" ORDER BY societe ASC')
+        societes = [row['societe'] for row in cursor.fetchall() if row['societe']]
+        conn.close()
+        combined = sorted(set(SOCIETES) | set(societes))
+        return jsonify({'success': True, 'societes': combined})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500

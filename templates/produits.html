@@ -24,14 +24,8 @@
 
                     <div class="form-group">
                         <label for="produit-societe">Société / Famille</label>
-                        <input type="text" id="produit-societe" name="societe" required list="societes-list" placeholder="Ex: Antibiotiques" />
-                        <datalist id="societes-list">
-                            <option value="Antibiotiques">
-                            <option value="Analgésiques">
-                            <option value="Vitamines">
-                            <option value="Dermatologie">
-                            <option value="Matériel Médical">
-                        </datalist>
+                        <input list="societes-list" id="produit-societe" name="societe" required placeholder="Choisir ou saisir une société" />
+                        <datalist id="societes-list"></datalist>
                     </div>
 
                     <div class="form-group">
@@ -62,16 +56,14 @@
                     <input type="text" id="search-produit" placeholder="🔍 Rechercher..." oninput="filtrerTableProduits()" class="input-sm" />
                 </div>
             </div>
-            <div class="card-body p0">
+            <div class="card-body p0" id="table-produits-container">
                 <table class="data-table" id="table-produits">
                     <thead>
                         <tr>
                             <th>Nom</th>
                             <th>Société</th>
-                            <th>Prix Vente</th>
                             <th>Stock</th>
-                            <th>Péremption</th>
-                            <th>Alerte</th>
+                            <th>Seuil</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -102,32 +94,55 @@
             const res = await fetch('/api/produits/?with_stock=true');
             const data = await res.json();
             if (data.success) {
-                tousProduits = data.produits;
-                afficherTableProduits(data.produits);
+                tousProduits = data.produits.sort((a, b) => (a.nom || '').localeCompare(b.nom || ''));
+                afficherTableProduits(tousProduits);
+                remplirSocietesProduits(tousProduits);
+                remplirDatalistSocietes(tousProduits);
             }
         } catch (error) {
             console.error('Erreur chargement produits:', error);
         }
     }
 
+    function remplirSocietesProduits(produits) {
+        const select = document.getElementById('filtre-societe');
+        if (!select) return;
+
+        const societes = [...new Set(produits.map(p => p.societe).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+        select.innerHTML = '<option value="">Toutes sociétés</option>' + societes.map(s => `<option value="${s}">${s}</option>`).join('');
+    }
+
+    function remplirDatalistSocietes(produits) {
+        const datalist = document.getElementById('societes-list');
+        if (!datalist) return;
+
+        const societes = [...new Set(produits.map(p => p.societe).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+        datalist.innerHTML = societes.map(s => `<option value="${s}"></option>`).join('');
+    }
+
+    function filtrerTableProduits() {
+        const q = (document.getElementById('search-produit').value || '').toLowerCase();
+        const societe = document.getElementById('filtre-societe').value;
+        const produitsFiltres = tousProduits.filter(p => {
+            const matchesText = q === '' || `${p.nom || ''} ${p.societe || ''}`.toLowerCase().includes(q);
+            const matchesSociete = !societe || p.societe === societe;
+            return matchesText && matchesSociete;
+        });
+        afficherTableProduits(produitsFiltres);
+    }
+
     function afficherTableProduits(produits) {
         const badge = document.getElementById('badge-total-produits');
         if (badge) badge.textContent = `${produits.length} produit(s) au total`;
-        setupPagination('table-produits', produits, function(pageData) {
+        setupPagination('table-produits-container', produits, function(pageData) {
             const tbody = document.querySelector('#table-produits tbody');
             tbody.innerHTML = pageData.map(p => `
                 <tr id="row-prod-${p.id}">
                     <td class="bold">${p.nom}</td>
                     <td>${badgeSociete(p.societe)}</td>
-                    <td>${formaterFCFA(p.prix_vente)}</td>
                     <td>
                         <span class="stock-pill ${p.stock_actuel <= p.seuil_alerte ? 'stock-low' : ''}">
                             ${p.stock_actuel}
-                        </span>
-                    </td>
-                    <td>
-                        <span class="badge ${p.jours_restants !== null && p.jours_restants <= 30 ? 'badge-sabc' : 'badge-guinness'}">
-                            ${p.date_peremption || '—'}
                         </span>
                     </td>
                     <td>${p.seuil_alerte}</td>
@@ -138,7 +153,7 @@
                         </div>
                     </td>
                 </tr>
-            `).join('') || '<tr><td colspan="7" class="table-empty">Aucun produit trouvé</td></tr>';
+            `).join('') || '<tr><td colspan="5" class="table-empty">Aucun produit trouvé</td></tr>';
         }, 10);
     }
 
@@ -211,15 +226,6 @@
                         afficherNotif(res.message, 'error');
                     }
                 });
-        });
-    }
-
-    function filtrerTableProduits() {
-        const q = document.getElementById('search-produit').value.toLowerCase();
-        const rows = document.querySelectorAll('#table-produits tbody tr');
-        rows.forEach(row => {
-            const text = row.textContent.toLowerCase();
-            row.style.display = text.includes(q) ? '' : 'none';
         });
     }
 </script>

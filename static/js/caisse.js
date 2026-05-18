@@ -22,12 +22,21 @@ async function chargerProduitsSelect() {
         const response = await fetch('/api/produits?with_stock=true');
         const data = await response.json();
         if (data.success) {
-            tousLesProduits = data.produits;
+            tousLesProduits = data.produits.sort((a, b) => (a.nom || '').localeCompare(b.nom || ''));
             remplirSelectProduits(tousLesProduits);
+            remplirSocietesVente();
         }
     } catch (error) {
         console.error('Erreur chargement produits:', error);
     }
+}
+
+function remplirSocietesVente() {
+    const select = document.getElementById('vente-societe-filtre');
+    if (!select) return;
+
+    const societes = [...new Set(tousLesProduits.map(p => p.societe).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    select.innerHTML = '<option value="">Toutes</option>' + societes.map(s => `<option value="${s}">${s}</option>`).join('');
 }
 
 function remplirSelectProduits(produits) {

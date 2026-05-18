@@ -99,6 +99,7 @@ def rapport_journalier_json():
         row_depenses = cursor.fetchone()
         depenses_appro = row_depenses['cout_stock'] + row_depenses['frais_livr']
         frais_livraison_total = row_depenses['frais_livr']
+        solde_attendu = basic_stats['revenus'] - depenses_appro
         
         # Ventes par société
         cursor.execute('''
@@ -122,6 +123,7 @@ def rapport_journalier_json():
             **stats_ventes,
             'depenses_appro': depenses_appro,
             'frais_livraison': frais_livraison_total,
+            'solde_attendu': solde_attendu,
             'ventes': ventes,
             'approvisionnements': appros,
             'par_societe': par_societe
@@ -221,17 +223,15 @@ def rapport_journalier():
         # Résumé
         elements.append(Paragraph(f"<b>Résumé du jour</b>", styles['Heading2']))
         
+        total_appro = sum(a['total'] for a in appros)
         summary_data = [
             ['Total ventes', f"{totals['total_ventes']:,.0f} FCFA"],
+            ['Dépenses appro.', f"{total_appro:,.0f} FCFA"],
             ['Bénéfice', f"{totals['total_benefice']:,.0f} FCFA"],
             ['Nombre de ventes', str(totals['nb_ventes'])],
             ['Articles vendus', str(totals['total_articles'])],
+            ['Solde théorique (ventes - appro)', f"{totals['total_ventes'] - total_appro:,.0f} FCFA"]
         ]
-        
-        if appros:
-            total_appro = sum(a['total'] for a in appros)
-            summary_data.append(['Dépenses appro.', f"{total_appro:,.0f} FCFA"])
-            summary_data.append(['Solde attendu', f"{totals['total_ventes'] - total_appro:,.0f} FCFA"])
         
         summary_table = Table(summary_data, colWidths=[4*cm, 4*cm])
         summary_table.setStyle(TableStyle([
