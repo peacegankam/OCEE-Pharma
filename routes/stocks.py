@@ -223,7 +223,7 @@ def ajuster_stock():
             SELECT * FROM lots_stock
             WHERE produit_id = ? AND quantite_actuelle > 0
             ORDER BY 
-                CASE WHEN date_peremption < ? THEN 0 ELSE 1 END ASC,
+                CASE WHEN date_peremption <= ? THEN 0 ELSE 1 END ASC,
                 date_reception ASC
         ''', (produit_id, today_str))
         lots = cursor.fetchall()
@@ -231,7 +231,7 @@ def ajuster_stock():
         if raison == 'Retrait produit périmé':
             cursor.execute('''
                 SELECT * FROM lots_stock
-                WHERE produit_id = ? AND quantite_actuelle > 0 AND date_peremption < ?
+                WHERE produit_id = ? AND quantite_actuelle > 0 AND date_peremption <= ?
                 ORDER BY date_peremption ASC, date_reception ASC
             ''', (produit_id, today_str))
             lots_perimes = cursor.fetchall()

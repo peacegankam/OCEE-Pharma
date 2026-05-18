@@ -386,7 +386,7 @@ def get_bilan():
         
         # Évolution journalière
         cursor.execute('''
-            SELECT DATE(REPLACE(date_vente, 'T', ' ')) as date, SUM(quantite * prix_unitaire) as montant
+            SELECT DATE(REPLACE(date_vente, 'T', ' ')) as date, SUM(quantite * prix_unitaire) as revenu
             FROM ventes
             WHERE DATE(REPLACE(date_vente, 'T', ' ')) BETWEEN ? AND ?
             GROUP BY DATE(REPLACE(date_vente, 'T', ' '))

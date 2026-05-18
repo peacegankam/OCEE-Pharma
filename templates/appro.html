@@ -228,19 +228,6 @@
         </div>
 
         <!-- fin bon de commande -->
-
-        <div class="card mt-1">
-
-            <div class="card-header">
-                <span class="card-title">📊 Dépenses d'approvisionnement</span>
-                <span class="card-badge">7 derniers jours</span>
-            </div>
-            <div class="card-body">
-                <canvas id="chart-depenses-appro" height="200"></canvas>
-            </div>
-        </div>
-
-    </div>
 </div>
 
     {% else %}
@@ -267,7 +254,6 @@
         chargerFournisseurs();
         chargerHistoriqueAppro();
         chargerDepensesAppro();
-        chargerGraphiqueDepenses();
 
         // Dates par défaut : cette semaine
         const aujourd = new Date();
@@ -483,7 +469,6 @@
                     document.getElementById('cout-unitaire-panel').style.display = 'none';
                     chargerHistoriqueAppro();
                     chargerDepensesAppro();
-                    if (typeof chargerGraphiqueDepenses === 'function') chargerGraphiqueDepenses();
                 } else {
                     afficherNotif(res.message || 'Erreur lors de l\'enregistrement', 'error');
                 }
@@ -516,40 +501,6 @@
             paupEl.textContent = '— FCFA';
             pvuEl.textContent = '— FCFA';
         }
-    }
-
-
-    function chargerGraphiqueDepenses() {
-        fetch('/api/appro/depenses-semaine')
-            .then(r => r.json())
-            .then(data => {
-                const ctx = document.getElementById('chart-depenses-appro').getContext('2d');
-                if (window.myChartAppro) window.myChartAppro.destroy();
-                window.myChartAppro = new Chart(ctx, {
-                    type: 'line',
-                    data: {
-                        labels: data.map(d => d.date),
-                        datasets: [{
-                            label: 'Dépenses (FCFA)',
-                            data: data.map(d => d.montant),
-                            borderColor: '#2A9D8F',
-                            backgroundColor: 'rgba(42, 157, 143, 0.1)',
-                            fill: true,
-                            tension: 0.4
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: { display: false }
-                        },
-                        scales: {
-                            y: { beginAtZero: true }
-                        }
-                    }
-                });
-            });
     }
 
 

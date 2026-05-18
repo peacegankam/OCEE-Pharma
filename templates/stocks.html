@@ -226,8 +226,14 @@
                 
                 let isPositive = h.type.includes('(+)') || h.type === 'appro' || h.type === 'ajout' || diff >= 0;
                 
+                // Déterminer si la ligne concerne un stock périmé
+                let rowClass = '';
+                if (h.raison && h.raison.includes('Retrait produit périmé')) {
+                    rowClass = ' style="background-color: rgba(230, 57, 70, 0.15);"';
+                }
+                
                 return `
-                <tr>
+                <tr${rowClass}>
                     <td class="text-sm">${new Date(h.date_mouvement).toLocaleString()}</td>
                     <td class="bold">${h.produit}</td>
                     <td>
@@ -238,7 +244,7 @@
                     <td class="bold">${sign}</td>
                     <td class="text-sm" style="font-size: 11px; line-height: 1.2; color: var(--text-muted);">${initialHtml}</td>
                     <td class="bold">${h.quantite_apres}</td>
-                    <td class="text-sm" style="font-size: 11px; line-height: 1.2; color: var(--text-muted);">${finalHtml}</td>
+                    <td class="text-sm" style="font-size: 11px; line-height: 1.2; ${rowClass ? 'color: #E63946; font-weight: bold;' : 'color: var(--text-muted);'}">${finalHtml}</td>
                     <td class="text-muted text-sm italic">${h.raison || '—'}</td>
                     <td>
                         <span class="text-sm">

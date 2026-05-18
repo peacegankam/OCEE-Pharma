@@ -64,6 +64,7 @@
                             <th>Société</th>
                             <th>Stock</th>
                             <th>Seuil</th>
+                            <th>Date Péremption</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -136,7 +137,16 @@
         if (badge) badge.textContent = `${produits.length} produit(s) au total`;
         setupPagination('table-produits-container', produits, function(pageData) {
             const tbody = document.querySelector('#table-produits tbody');
-            tbody.innerHTML = pageData.map(p => `
+            tbody.innerHTML = pageData.map(p => {
+                const datePeremption = p.prochaine_peremption ? new Date(p.prochaine_peremption).toLocaleDateString('fr-FR') : '—';
+                const jours = p.jours_restants !== null ? p.jours_restants : null;
+                let badgePeremption = '—';
+                if (jours !== null) {
+                    if (jours < 0) badgePeremption = '<span style="background: #E63946; color: white; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold;">Périmé</span>';
+                    else if (jours <= 7) badgePeremption = `<span style="background: #FFB627; color: #000; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold;">${jours}j</span>`;
+                    else badgePeremption = datePeremption;
+                }
+                return `
                 <tr id="row-prod-${p.id}">
                     <td class="bold">${p.nom}</td>
                     <td>${badgeSociete(p.societe)}</td>
@@ -146,6 +156,7 @@
                         </span>
                     </td>
                     <td>${p.seuil_alerte}</td>
+                    <td>${badgePeremption}</td>
                     <td>
                         <div class="btn-group">
                             <button class="btn btn-ghost btn-sm" onclick='editerProduit(${JSON.stringify(p)})'>✏️</button>
@@ -153,7 +164,8 @@
                         </div>
                     </td>
                 </tr>
-            `).join('') || '<tr><td colspan="5" class="table-empty">Aucun produit trouvé</td></tr>';
+                `;
+            }).join('') || '<tr><td colspan="6" class="table-empty">Aucun produit trouvé</td></tr>';
         }, 10);
     }
 

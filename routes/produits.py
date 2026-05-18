@@ -17,7 +17,9 @@ def get_produits():
         cursor = conn.cursor()
         
         query = '''
-            SELECT p.*, s.quantite as stock_actuel
+            SELECT p.*, s.quantite as stock_actuel,
+                   (SELECT MIN(date_peremption) FROM lots_stock 
+                    WHERE produit_id = p.id AND quantite_actuelle > 0) as prochaine_peremption
             FROM produits p
             LEFT JOIN stocks s ON p.id = s.produit_id
             WHERE 1=1
@@ -40,14 +42,14 @@ def get_produits():
         for p in produits:
             produit_dict = dict(p)
             
-            # Calcul jours restants
-            if produit_dict.get('date_peremption'):
+            # Calcul jours restants basé sur la date de péremption la plus proche
+            if produit_dict.get('prochaine_peremption'):
                 try:
                     # Gérer les formats de date MySQL vs SQLite
-                    if isinstance(produit_dict['date_peremption'], str):
-                        dp = datetime.strptime(produit_dict['date_peremption'], '%Y-%m-%d')
+                    if isinstance(produit_dict['prochaine_peremption'], str):
+                        dp = datetime.strptime(produit_dict['prochaine_peremption'], '%Y-%m-%d')
                     else:
-                        dp = datetime.combine(produit_dict['date_peremption'], datetime.min.time())
+                        dp = datetime.combine(produit_dict['prochaine_peremption'], datetime.min.time())
                         
                     delta = dp - date_aujourdhui
                     produit_dict['jours_restants'] = delta.days
