@@ -31,24 +31,30 @@
 
                     <div class="form-group">
                         <label>Type d'opération</label>
-                        <div class="btn-group-toggle">
-                            <input type="radio" name="type" value="ajout" id="type-entree" checked />
-                            <label for="type-entree" class="label-green">Entrée (+)</label>
+                        <select id="ajust-type" name="type" required onchange="changerMotifsAjustement()" style="background: var(--bg-dark); color: var(--text-light); border: 1px solid var(--border-color); border-radius: 7px; padding: 10px; width: 100%;">
+                            <option value="retrait">Retrait anomalie (−)</option>
+                            <option value="correction">Correction inventaire négatif (+)</option>
+                        </select>
+                    </div>
 
-                            <input type="radio" name="type" value="retrait" id="type-sortie" />
-                            <label for="type-sortie" class="label-red">Sortie (−)</label>
-                        </div>
+                    <div class="form-group">
+                        <label for="ajust-raison-select">Motif précis</label>
+                        <select id="ajust-raison-select" required onchange="remplirRaisonAjustement()" style="background: var(--bg-dark); color: var(--text-light); border: 1px solid var(--border-color); border-radius: 7px; padding: 10px; width: 100%;">
+                            <option value="">— Choisir un motif —</option>
+                            <option value="Retrait produit périmé">Retrait produit périmé</option>
+                            <option value="Casse">Casse</option>
+                            <option value="Vol / Perte">Vol / Perte</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group" style="display: none;">
+                        <label>Raison / Note</label>
+                        <textarea id="ajust-raison" name="raison" placeholder="ex: Correction inventaire, Casse, etc."></textarea>
                     </div>
 
                     <div class="form-group">
                         <label>Quantité</label>
                         <input type="number" id="ajust-quantite" name="quantite" min="1" value="1" required />
-                    </div>
-
-                    <div class="form-group">
-                        <label>Raison / Note</label>
-                        <textarea id="ajust-raison" name="raison"
-                            placeholder="ex: Correction inventaire, Casse, etc."></textarea>
                     </div>
 
                     <button type="submit" class="btn btn-primary btn-full">
@@ -89,10 +95,13 @@
                         <tr>
                             <th>Date / Heure</th>
                             <th>Produit</th>
-                            <th>Type</th>
-                            <th>Qté</th>
-                            <th>Auteur</th>
+                            <th>Type Mouvement</th>
+                            <th>Qtés</th>
+                            <th>Stock initial</th>
+                            <th>Stock total</th>
+                            <th>Stock détaillé</th>
                             <th>Note</th>
+                            <th>Auteur</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -155,28 +164,66 @@
         afficherHistorique(filtres);
     }
 
+    function changerMotifsAjustement() {
+        const type = document.getElementById('ajust-type').value;
+        const selectRaison = document.getElementById('ajust-raison-select');
+        const raisonText = document.getElementById('ajust-raison');
+        
+        if (type === 'correction') {
+            selectRaison.innerHTML = '<option value="Correction inventaire négatif">Correction inventaire négatif</option>';
+            selectRaison.value = "Correction inventaire négatif";
+            raisonText.value = "Correction inventaire négatif";
+        } else {
+            selectRaison.innerHTML = `
+                <option value="">— Choisir un motif —</option>
+                <option value="Retrait produit périmé">Retrait produit périmé</option>
+                <option value="Casse">Casse</option>
+                <option value="Vol / Perte">Vol / Perte</option>
+            `;
+            selectRaison.value = "";
+            raisonText.value = "";
+        }
+    }
+
+    function remplirRaisonAjustement() {
+        const selectRaison = document.getElementById('ajust-raison-select');
+        document.getElementById('ajust-raison').value = selectRaison.value;
+    }
+
     function afficherHistorique(mouvements) {
         setupPagination('table-mouvements-stock', mouvements, function (pageData) {
             const tbody = document.querySelector('#table-mouvements-stock tbody');
-            tbody.innerHTML = pageData.map(h => `
+            tbody.innerHTML = pageData.map(h => {
+                const diff = h.quantite_apres - h.quantite_avant;
+                const sign = diff >= 0 ? `+${diff}` : `${diff}`;
+                const initialHtml = (h.stock_initial_details || '—').replace(/\n/g, '<br>');
+                const finalHtml = (h.stock_final_details || '—').replace(/\n/g, '<br>');
+                
+                let isPositive = h.type.includes('(+)') || h.type === 'appro' || h.type === 'ajout' || diff >= 0;
+                
+                return `
                 <tr>
                     <td class="text-sm">${new Date(h.date_mouvement).toLocaleString()}</td>
                     <td class="bold">${h.produit}</td>
                     <td>
-                        <span class="badge ${h.type === 'ajout' || h.type === 'appro' ? 'badge-green' : 'badge-red'}">
+                        <span class="badge ${isPositive ? 'badge-green' : 'badge-red'}">
                             ${h.type.toUpperCase()}
                         </span>
                     </td>
-                    <td class="bold">${h.quantite_apres - h.quantite_avant}</td>
+                    <td class="bold">${sign}</td>
+                    <td class="text-sm" style="font-size: 11px; line-height: 1.2; color: var(--text-muted);">${initialHtml}</td>
+                    <td class="bold">${h.quantite_apres}</td>
+                    <td class="text-sm" style="font-size: 11px; line-height: 1.2; color: var(--text-muted);">${finalHtml}</td>
+                    <td class="text-muted text-sm italic">${h.raison || '—'}</td>
                     <td>
                         <span class="text-sm">
                             ${h.auteur_nom || 'Système'} 
                             ${h.auteur_role ? `<small>(${h.auteur_role})</small>` : ''}
                         </span>
                     </td>
-                    <td class="text-muted text-sm italic">${h.raison || '—'}</td>
                 </tr>
-            `).join('') || '<tr><td colspan="6" class="table-empty">Aucun mouvement</td></tr>';
+                `;
+            }).join('') || '<tr><td colspan="9" class="table-empty">Aucun mouvement</td></tr>';
         }, 10);
     }
 
@@ -203,12 +250,12 @@
         const data = {
             produit_id: parseInt(document.getElementById('ajust-produit').value),
             quantite: parseInt(document.getElementById('ajust-quantite').value),
-            type: document.querySelector('input[name="type"]:checked').value,
+            type: document.getElementById('ajust-type').value,
             raison: document.getElementById('ajust-raison').value
         };
 
-        if (!data.produit_id || isNaN(data.quantite)) {
-            afficherNotif('Veuillez remplir les champs obligatoires', 'warning');
+        if (!data.produit_id || isNaN(data.quantite) || !data.raison) {
+            afficherNotif('Veuillez remplir les champs obligatoires et choisir un motif', 'warning');
             return;
         }
 
@@ -223,6 +270,7 @@
                     showSuccessModal('Stock Ajusté', 'Le stock a été mis à jour avec succès.', () => {
                         e.target.reset();
                         document.getElementById('stock-info-ajust').style.display = 'none';
+                        document.getElementById('ajust-raison-select').value = '';
                         chargerProduitsSelectStock();
                         chargerHistoriqueStock();
                         chargerAlertesStocks();

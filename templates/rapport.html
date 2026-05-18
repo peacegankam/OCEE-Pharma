@@ -95,15 +95,15 @@
         <div class="rapport-kpi rapport-kpi-orange">
             <div class="rapport-kpi-icon">🚚</div>
             <div class="rapport-kpi-val" id="rapport-depenses-appro">— FCFA</div>
-            <div class="rapport-kpi-label">Dépenses livraisons</div>
-            <div class="rapport-kpi-sub">Approvisionnements du jour</div>
+            <div class="rapport-kpi-label">Valeur approvisionnée</div>
+            <div class="rapport-kpi-sub">Stock reçu aujourd'hui</div>
         </div>
 
         <div class="rapport-kpi rapport-kpi-blue">
             <div class="rapport-kpi-icon">📈</div>
             <div class="rapport-kpi-val" id="rapport-benefice">— FCFA</div>
-            <div class="rapport-kpi-label">Bénéfice brut</div>
-            <div class="rapport-kpi-sub">Revenus − Coût produits</div>
+            <div class="rapport-kpi-label">Bénéfice brut (FIFO)</div>
+            <div class="rapport-kpi-sub">Marge sur les lots vendus</div>
         </div>
 
     </div>
@@ -112,13 +112,9 @@
     <div class="solde-banner" id="solde-banner">
         <div class="solde-label">💼 Somme attendue en caisse ce soir</div>
         <div class="solde-formule">
-            <span id="solde-revenus-f">—</span>
-            <span class="solde-op"> − </span>
-            <span id="solde-depenses-f">—</span>
-            <span class="solde-op"> = </span>
             <span class="solde-result" id="solde-net">— FCFA</span>
         </div>
-        <div class="solde-sub">Revenus encaissés − Dépenses livraisons du jour</div>
+        <div class="solde-sub">Égal aux revenus encaissés sur les ventes physiques de la journée</div>
     </div>
 
     <!-- Ventes détaillées -->
@@ -266,9 +262,7 @@
         document.getElementById('rapport-benefice').textContent = formaterFCFA(d.benefice);
 
         // Solde net
-        const solde = d.revenus - d.depenses_appro;
-        document.getElementById('solde-revenus-f').textContent = formaterFCFA(d.revenus);
-        document.getElementById('solde-depenses-f').textContent = formaterFCFA(d.depenses_appro);
+        const solde = d.revenus;
         document.getElementById('solde-net').textContent = formaterFCFA(solde);
         document.getElementById('solde-net').className =
             'solde-result ' + (solde >= 0 ? 'positive' : 'negative');

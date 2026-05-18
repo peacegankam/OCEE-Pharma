@@ -175,7 +175,38 @@ def init_db():
         )
     ''')
     
-    # Table des approvisionnements
+    # Table des lots de stock (FIFO)
+    cursor.execute(f'''
+        CREATE TABLE IF NOT EXISTS lots_stock (
+            id {pk_auto},
+            produit_id INTEGER NOT NULL,
+            quantite_initiale INTEGER NOT NULL,
+            quantite_actuelle INTEGER NOT NULL,
+            prix_achat_unitaire INTEGER NOT NULL,
+            prix_vente_unitaire INTEGER DEFAULT 0,
+            date_reception TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            date_peremption DATE,
+            frais_livraison_lot INTEGER DEFAULT 0,
+            reference_lot VARCHAR(100),
+            quantite_cartons INTEGER DEFAULT 0,
+            produits_par_carton INTEGER DEFAULT 0,
+            prix_carton INTEGER DEFAULT 0,
+            fournisseur VARCHAR(255)
+        )
+    ''')
+
+    # Table de liaison Vente <-> Lot
+    cursor.execute(f'''
+        CREATE TABLE IF NOT EXISTS vente_lots (
+            id {pk_auto},
+            vente_id INTEGER NOT NULL,
+            lot_id INTEGER NOT NULL,
+            quantite INTEGER NOT NULL,
+            prix_achat_unitaire INTEGER NOT NULL
+        )
+    ''')
+
+    # Table des approvisionnements (historique global)
     cursor.execute(f'''
         CREATE TABLE IF NOT EXISTS approvisionnements (
             id {pk_auto},
@@ -187,7 +218,7 @@ def init_db():
         )
     ''')
     
-    # Table des ajustements de stock
+    # Table des ajustements de stock (historique mouvements)
     cursor.execute(f'''
         CREATE TABLE IF NOT EXISTS historique_stock (
             id {pk_auto},
@@ -197,7 +228,10 @@ def init_db():
             type VARCHAR(50) NOT NULL,
             raison TEXT,
             utilisateur_id INTEGER,
-            date_mouvement TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            date_mouvement TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            stock_initial_details TEXT,
+            stock_final_details TEXT,
+            perte_financiere INTEGER DEFAULT 0
         )
     ''')
     
@@ -211,18 +245,49 @@ def migrate_db():
     """Applique les modifications de schéma aux tables existantes"""
     conn = get_db()
     cursor = conn.cursor()
+    
+    # Tables existantes
+    migrations = [
+        ("ventes", "ADD COLUMN vendeur_id INTEGER"),
+        ("produits", "ADD COLUMN date_peremption DATE"),
+        ("historique_stock", "ADD COLUMN utilisateur_id INTEGER"),
+        ("lots_stock", "ADD COLUMN quantite_cartons INTEGER DEFAULT 0"),
+        ("lots_stock", "ADD COLUMN produits_par_carton INTEGER DEFAULT 0"),
+        ("lots_stock", "ADD COLUMN prix_carton INTEGER DEFAULT 0"),
+        ("lots_stock", "ADD COLUMN prix_vente_unitaire INTEGER DEFAULT 0"),
+        ("lots_stock", "ADD COLUMN fournisseur VARCHAR(255)"),
+        ("historique_stock", "ADD COLUMN stock_initial_details TEXT"),
+        ("historique_stock", "ADD COLUMN stock_final_details TEXT"),
+        ("historique_stock", "ADD COLUMN perte_financiere INTEGER DEFAULT 0"),
+    ]
+    
+    for table, cmd in migrations:
+        try:
+            cursor.execute(f"ALTER TABLE {table} {cmd}")
+        except Exception:
+            pass
+
+    # Migration spéciale pour initialiser les lots à partir des stocks actuels
     try:
-        cursor.execute("ALTER TABLE ventes ADD COLUMN vendeur_id INTEGER")
-    except Exception:
-        pass
-    try:
-        cursor.execute("ALTER TABLE produits ADD COLUMN date_peremption DATE")
-    except Exception:
-        pass
-    try:
-        cursor.execute("ALTER TABLE historique_stock ADD COLUMN utilisateur_id INTEGER")
-    except Exception:
-        pass
+        cursor.execute("SELECT COUNT(*) as count FROM lots_stock")
+        row = cursor.fetchone()
+        if row and row['count'] == 0:
+            print("📦 Initialisation des lots à partir des stocks existants...")
+            cursor.execute('''
+                SELECT s.produit_id, s.quantite, p.prix_achat, p.date_peremption
+                FROM stocks s
+                JOIN produits p ON s.produit_id = p.id
+                WHERE s.quantite > 0
+            ''')
+            stocks = cursor.fetchall()
+            for s in stocks:
+                cursor.execute('''
+                    INSERT INTO lots_stock (produit_id, quantite_initiale, quantite_actuelle, prix_achat_unitaire, date_peremption, reference_lot)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                ''', (s['produit_id'], s['quantite'], s['quantite'], s['prix_achat'], s['date_peremption'], 'LOT_INITIAL'))
+    except Exception as e:
+        print(f"Erreur migration lots: {e}")
+
     conn.commit()
     conn.close()
 
@@ -335,9 +400,9 @@ def get_stats_globales():
     ventes_jour = row['total'] if row else 0
     
     cursor.execute('''
-        SELECT COALESCE(SUM(v.quantite * (v.prix_unitaire - p.prix_achat)), 0) as benefice
+        SELECT COALESCE(SUM(vl.quantite * (v.prix_unitaire - vl.prix_achat_unitaire)), 0) as benefice
         FROM ventes v
-        JOIN produits p ON v.produit_id = p.id
+        JOIN vente_lots vl ON v.id = vl.vente_id
         WHERE DATE(REPLACE(v.date_vente, 'T', ' ')) = ?
     ''', (today.isoformat(),))
     row = cursor.fetchone()
@@ -351,13 +416,22 @@ def get_stats_globales():
     ''')
     row = cursor.fetchone()
     alertes_stock = row['count'] if row else 0
+
+    cursor.execute('''
+        SELECT COALESCE(SUM(perte_financiere), 0) as total_perte
+        FROM historique_stock
+        WHERE DATE(REPLACE(date_mouvement, 'T', ' ')) = ? AND type = 'Ajustement (-)'
+    ''', (today.isoformat(),))
+    row_perte = cursor.fetchone()
+    pertes_jour = row_perte['total_perte'] if row_perte else 0
     
     conn.close()
     return {
         'revenus_jour': revenus_jour,
         'ventes_jour': ventes_jour,
         'benefice_jour': benefice_jour,
-        'alertes_stock': alertes_stock
+        'alertes_stock': alertes_stock,
+        'pertes_jour': pertes_jour
     }
 
 def get_revenus_semaine():

@@ -58,6 +58,7 @@ def get_kpis():
             'revenus_jour': stats.get('revenus_jour', 0),
             'ventes_jour': stats.get('ventes_jour', 0),
             'benefice_jour': stats.get('benefice_jour', 0),
+            'pertes_jour': stats.get('pertes_jour', 0),
             'alertes_stock': total_alertes,
             'revenus_mensuel': get_revenus_mensuel(),
             'revenus_total': get_revenus_total()
@@ -69,6 +70,7 @@ def get_kpis():
             'revenus_jour': 0,
             'ventes_jour': 0,
             'benefice_jour': 0,
+            'pertes_jour': 0,
             'alertes_stock': 0
         })
 

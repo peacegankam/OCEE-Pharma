@@ -42,18 +42,32 @@ def rapport_journalier_json():
             d['heure'] = str(d['date_vente'])[11:16]
             ventes.append(d)
         
-        # Totaux ventes
+        # Totaux ventes exacts par lot (FIFO)
         cursor.execute('''
             SELECT 
                 COUNT(*) as nb_ventes,
-                COALESCE(SUM(v.quantite * v.prix_unitaire), 0) as revenus,
-                COALESCE(SUM(v.quantite * p.prix_achat), 0) as cout_produits,
-                COALESCE(SUM(v.quantite * (v.prix_unitaire - p.prix_achat)), 0) as benefice
+                COALESCE(SUM(v.quantite * v.prix_unitaire), 0) as revenus
             FROM ventes v
-            JOIN produits p ON v.produit_id = p.id
             WHERE DATE(REPLACE(v.date_vente, 'T', ' ')) = ?
         ''', (date_str,))
-        stats_ventes = dict(cursor.fetchone())
+        basic_stats = cursor.fetchone()
+        
+        cursor.execute('''
+            SELECT 
+                COALESCE(SUM(vl.quantite * vl.prix_achat_unitaire), 0) as cout_produits,
+                COALESCE(SUM(vl.quantite * (v.prix_unitaire - vl.prix_achat_unitaire)), 0) as benefice
+            FROM ventes v
+            JOIN vente_lots vl ON v.id = vl.vente_id
+            WHERE DATE(REPLACE(v.date_vente, 'T', ' ')) = ?
+        ''', (date_str,))
+        lot_stats = cursor.fetchone()
+        
+        stats_ventes = {
+            'nb_ventes': basic_stats['nb_ventes'],
+            'revenus': basic_stats['revenus'],
+            'cout_produits': lot_stats['cout_produits'],
+            'benefice': lot_stats['benefice']
+        }
         
         # Approvisionnements du jour
         cursor.execute('''
@@ -74,13 +88,17 @@ def rapport_journalier_json():
             d['heure'] = str(d['date_appro'])[11:16]
             appros.append(d)
         
-        # Total dépenses appro
+        # Total dépenses appro (Coût produits + Frais livraison)
         cursor.execute('''
-            SELECT COALESCE(SUM(quantite * prix_achat_unitaire), 0) as depenses_appro
-            FROM approvisionnements
-            WHERE DATE(date_appro) = ?
+            SELECT 
+                COALESCE(SUM(quantite_initiale * prix_achat_unitaire), 0) as cout_stock,
+                COALESCE(SUM(frais_livraison_lot), 0) as frais_livr
+            FROM lots_stock
+            WHERE DATE(date_reception) = ?
         ''', (date_str,))
-        depenses_appro = cursor.fetchone()['depenses_appro']
+        row_depenses = cursor.fetchone()
+        depenses_appro = row_depenses['cout_stock'] + row_depenses['frais_livr']
+        frais_livraison_total = row_depenses['frais_livr']
         
         # Ventes par société
         cursor.execute('''
@@ -103,6 +121,7 @@ def rapport_journalier_json():
             'date': date_str,
             **stats_ventes,
             'depenses_appro': depenses_appro,
+            'frais_livraison': frais_livraison_total,
             'ventes': ventes,
             'approvisionnements': appros,
             'par_societe': par_societe
@@ -137,19 +156,32 @@ def rapport_journalier():
         
         ventes = cursor.fetchall()
         
-        # Calculer les totaux
+        # Calculer les totaux (FIFO)
         cursor.execute('''
             SELECT 
                 COUNT(*) as nb_ventes,
                 COALESCE(SUM(v.quantite), 0) as total_articles,
-                COALESCE(SUM(v.quantite * v.prix_unitaire), 0) as total_ventes,
-                COALESCE(SUM(v.quantite * (v.prix_unitaire - p.prix_achat)), 0) as total_benefice
+                COALESCE(SUM(v.quantite * v.prix_unitaire), 0) as total_ventes
             FROM ventes v
-            JOIN produits p ON v.produit_id = p.id
-            WHERE DATE(v.date_vente) = ?
+            WHERE DATE(REPLACE(v.date_vente, 'T', ' ')) = ?
         ''', (date_str,))
+        basic_totals = cursor.fetchone()
         
-        totals = cursor.fetchone()
+        cursor.execute('''
+            SELECT 
+                COALESCE(SUM(vl.quantite * (v.prix_unitaire - vl.prix_achat_unitaire)), 0) as total_benefice
+            FROM ventes v
+            JOIN vente_lots vl ON v.id = vl.vente_id
+            WHERE DATE(REPLACE(v.date_vente, 'T', ' ')) = ?
+        ''', (date_str,))
+        lot_totals = cursor.fetchone()
+        
+        totals = {
+            'nb_ventes': basic_totals['nb_ventes'],
+            'total_articles': basic_totals['total_articles'],
+            'total_ventes': basic_totals['total_ventes'],
+            'total_benefice': lot_totals['total_benefice']
+        }
         
         # Récupérer les approvisionnements du jour
         cursor.execute('''

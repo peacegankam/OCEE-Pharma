@@ -88,77 +88,86 @@
 <body>
     <div class="login-wrapper">
         <div class="login-card">
-            <div class="login-logo">💊</div>
+            <div>
+                <img src="{{ url_for('static', filename='logo.jpeg') }}" alt="Logo OCEE PHARMA" style="max-height: 100px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); border: 2px solid var(--border-color);">
+            </div>
             <h1 class="login-title">Bienvenue chez {{ nom_bar }}</h1>
-            <p style="margin-top: 0px; margin-bottom: 30px; color: var(--text-muted); font-size: 14px;">
+            <p style="margin-top: 0px; margin-bottom: 25px; color: var(--text-muted); font-size: 14px;">
                 Votre partenaire santé de confiance
             </p>
 
             {% if error %}
-            <div class="error-msg">{{ error }}</div>
+            <div class="error-msg" style="background: rgba(230, 57, 70, 0.1); color: var(--red); padding: 12px; border-radius: 8px; margin-bottom: 20px; font-size: 14px; border: 1px solid rgba(230, 57, 70, 0.2);">
+                <i class="fas fa-circle-exclamation" style="margin-right: 8px;"></i>{{ error }}
+            </div>
             {% endif %}
 
-            <form action="{{ url_for('login') }}" method="POST" id="login-form">
-                <input type="hidden" name="user_id" id="selected-user-id">
+            <form action="{{ url_for('login') }}" method="POST" id="login-form" onsubmit="handleLoginSubmit(event)">
                 
-                <p style="margin-bottom: 20px; color: var(--text-muted);">Sélectionnez votre profil pour continuer</p>
-                
-                <div class="profiles-grid">
-                    {% for user in utilisateurs %}
-                    <div class="profile-btn" onclick="selectProfile('{{ user.id }}', '{{ user.role }}', {{ 'true' if user.code_pin else 'false' }}, this)">
-                        <div class="profile-icon">
-                            {% if user.role == 'admin' %}👨‍💼{% else %}👨‍⚕️{% endif %}
-                        </div>
-                        <div class="profile-name">{{ user.nom }}</div>
-                    </div>
-                    {% endfor %}
+                <div style="margin-bottom: 20px; text-align: left;">
+                    <label style="display: block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px; font-weight: 500;">Nom d'utilisateur</label>
+                    <input type="text" name="username" id="username-input" required placeholder="Ex: Gérant, Alice (Caisse 1)" style="width: 100%; border-radius: 8px; border: 1px solid var(--border-color); padding: 14px 18px; background: var(--bg-dark); color: var(--text-light); font-size: 15px; outline: none; transition: border-color 0.3s;" onfocus="this.style.borderColor='var(--orange)'" onblur="this.style.borderColor='var(--border-color)'">
                 </div>
 
-                <div class="pin-container" id="pin-section">
-                    <div class="form-group" style="position: relative;">
-                        <label id="pin-label">Mot de passe</label>
-                        <div style="position: relative;">
-                            <input type="password" name="pin" id="pin-input" placeholder="Votre mot de passe ou PIN" style="text-align: center; letter-spacing: 5px; width: 100%; padding-right: 40px; border-radius: 8px; border: 1px solid var(--border-color); padding-top: 15px; padding-bottom: 15px; background: var(--bg-dark); color: var(--text-light);">
-                            <button type="button" id="toggle-pwd" style="position: absolute; right: 15px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 16px;">
-                                <i class="fas fa-eye" id="eye-icon"></i>
-                            </button>
-                        </div>
+                <div style="margin-bottom: 25px; text-align: left; position: relative;">
+                    <label style="display: block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px; font-weight: 500;">Mot de passe / Code PIN</label>
+                    <div style="position: relative;">
+                        <input type="password" name="pin" id="pin-input" required placeholder="Votre mot de passe ou PIN" style="width: 100%; border-radius: 8px; border: 1px solid var(--border-color); padding: 14px 45px 14px 18px; background: var(--bg-dark); color: var(--text-light); font-size: 15px; outline: none; transition: border-color 0.3s;" onfocus="this.style.borderColor='var(--orange)'" onblur="this.style.borderColor='var(--border-color)'">
+                        <button type="button" id="toggle-pwd" style="position: absolute; right: 15px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 16px;">
+                            <i class="fas fa-eye" id="eye-icon"></i>
+                        </button>
                     </div>
                 </div>
 
-                <button type="submit" class="btn btn-primary btn-full btn-lg" id="btn-login" style="display: none; margin-top: 20px;">
-                    Se connecter
+                <button type="submit" class="btn btn-primary btn-full btn-lg" id="btn-login" style="margin-top: 10px; width: 100%;">
+                    Se connecter <i class="fas fa-arrow-right-to-bracket" style="margin-left: 8px;"></i>
                 </button>
             </form>
         </div>
     </div>
 
+    <!-- Modal Confirmation Connexion -->
+    <div id="login-confirm-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 10000; justify-content: center; align-items: center; backdrop-filter: blur(5px);">
+        <div style="background: var(--bg-card); padding: 40px; border-radius: 20px; border: 1px solid var(--border-color); width: 100%; max-width: 400px; text-align: center; box-shadow: 0 15px 50px rgba(0,0,0,0.6);">
+            <div style="font-size: 50px; margin-bottom: 20px;">🔐</div>
+            <h2 style="color: var(--orange); margin-bottom: 15px; font-weight: 700;">Confirmation</h2>
+            <p id="confirm-msg" style="color: var(--text-muted); margin-bottom: 30px; font-size: 16px; line-height: 1.5;">Voulez-vous vous connecter ?</p>
+            <div style="display: flex; gap: 15px;">
+                <button onclick="closeLoginModal()" style="flex: 1; padding: 12px; border-radius: 10px; border: 1px solid var(--border-color); background: none; color: var(--text-muted); cursor: pointer; font-weight: 600; transition: background 0.3s;" onhover="this.style.background='rgba(255,255,255,0.05)'">Annuler</button>
+                <button onclick="submitLoginForm()" style="flex: 1; padding: 12px; border-radius: 10px; border: none; background: var(--orange); color: white; font-weight: 600; cursor: pointer; transition: opacity 0.3s;" onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">Confirmer</button>
+            </div>
+        </div>
+    </div>
+
     <script>
-        function selectProfile(id, role, hasPin, el) {
-            // Unselect others
-            document.querySelectorAll('.profile-btn').forEach(b => b.classList.remove('selected'));
-            // Select this one
-            el.classList.add('selected');
-            // Set hidden field
-            document.getElementById('selected-user-id').value = id;
-            
-            // Show/hide PIN
-            const pinSection = document.getElementById('pin-section');
-            const pinInput = document.getElementById('pin-input');
-            const pinLabel = document.getElementById('pin-label');
-            const btn = document.getElementById('btn-login');
-            
-            if (hasPin) {
-                pinSection.style.display = 'block';
-                pinInput.required = true;
-                pinLabel.innerText = role === 'admin' ? 'Mot de passe Admin' : 'Mot de passe';
-            } else {
-                pinSection.style.display = 'none';
-                pinInput.required = false;
-                pinInput.value = '';
+        let isConfirmed = false;
+
+        function handleLoginSubmit(e) {
+            if (!isConfirmed) {
+                e.preventDefault();
+                const username = document.getElementById('username-input').value;
+                document.getElementById('confirm-msg').innerHTML = `Confirmez-vous la connexion en tant que <br><strong style="color:var(--text-light); font-size: 18px;">${escapeHtml(username)}</strong> ?`;
+                document.getElementById('login-confirm-modal').style.display = 'flex';
             }
-            
-            btn.style.display = 'block';
+        }
+
+        function closeLoginModal() {
+            document.getElementById('login-confirm-modal').style.display = 'none';
+        }
+
+        function submitLoginForm() {
+            isConfirmed = true;
+            document.getElementById('login-confirm-modal').style.display = 'none';
+            document.getElementById('login-form').submit();
+        }
+
+        function escapeHtml(text) {
+            return text
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
         }
 
         // Script pour afficher/masquer le mot de passe

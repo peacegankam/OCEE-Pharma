@@ -6,13 +6,36 @@ from datetime import datetime, timedelta
 appro_bp = Blueprint('appro', __name__)
 
 
+def get_lots_details_str(cursor, produit_id):
+    cursor.execute('''
+        SELECT date_reception, date_peremption, quantite_actuelle 
+        FROM lots_stock 
+        WHERE produit_id = ? AND quantite_actuelle > 0 
+        ORDER BY date_reception DESC
+    ''', (produit_id,))
+    lots = cursor.fetchall()
+    details = []
+    for lot in lots:
+        dt_raw = lot['date_reception']
+        dt_str = '—'
+        if dt_raw:
+            try:
+                if isinstance(dt_raw, str):
+                    dt_str = datetime.strptime(dt_raw[:10], '%Y-%m-%d').strftime('%d/%m/%Y')
+                else:
+                    dt_str = dt_raw.strftime('%d/%m/%Y')
+            except Exception:
+                dt_str = str(dt_raw)[:10]
+        details.append(f"{dt_str} {lot['quantite_actuelle']}")
+    return "\n".join(details)
+
 @appro_bp.route('/', methods=['POST'])
 def enregistrer_appro():
     """Enregistre un nouvel approvisionnement"""
     try:
         data = request.get_json()
         
-        required = ['produit_id', 'quantite', 'prix_achat_unitaire']
+        required = ['produit_id', 'quantite', 'prix_achat_unitaire', 'date_peremption']
         for field in required:
             if field not in data:
                 return jsonify({'success': False, 'message': f'Champ manquant: {field}'}), 400
@@ -20,7 +43,13 @@ def enregistrer_appro():
         produit_id = data['produit_id']
         quantite = data['quantite']
         prix_achat = data['prix_achat_unitaire']
+        date_perempt = data['date_peremption']
         note = data.get('note', '')
+        
+        quantite_cartons = data.get('quantite_cartons', 0)
+        produits_par_carton = data.get('produits_par_carton', 0)
+        prix_carton = data.get('prix_carton', 0)
+        fournisseur = data.get('fournisseur', '')
         
         conn = get_db()
         cursor = conn.cursor()
@@ -30,6 +59,7 @@ def enregistrer_appro():
         produit = cursor.fetchone()
         
         if not produit:
+            conn.close()
             return jsonify({'success': False, 'message': 'Produit non trouvé'}), 404
 
         # Récupérer le stock actuel + seuil
@@ -40,9 +70,7 @@ def enregistrer_appro():
         seuil_alerte = produit['seuil_alerte'] if 'seuil_alerte' in produit.keys() else None
         date_actuelle = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-        # Option: gérant seul pour créer/valider une livraison
-        # si le produit est en rupture/alerte (stock actuel <= seuil d'alerte).
-        # Employés: peuvent consulter, mais pas valider la livraison en cas d'alerte.
+        # Option: gérant seul pour créer/valider une livraison si en alerte
         est_role_admin = (session.get('role') == 'admin')
         en_alerte = False
         if seuil_alerte is not None:
@@ -51,13 +79,18 @@ def enregistrer_appro():
             en_alerte = (ancien_stock == 0)
 
         if (not est_role_admin) and en_alerte:
+            conn.close()
             return jsonify({
                 'success': False,
                 'message': "Action réservée au gérant : livraison pour produit en rupture/alerte (stock <= seuil)."
             }), 403
 
+        # Capturer le stock initial sous forme détaillée
+        stock_initial_details = get_lots_details_str(cursor, produit_id)
 
-        
+        # Calculer le PVU (Marge 1.5)
+        pvu = int(round(prix_achat * 1.5))
+
         # Enregistrer l'approvisionnement
         cursor.execute('''
             INSERT INTO approvisionnements 
@@ -65,7 +98,27 @@ def enregistrer_appro():
             VALUES (?, ?, ?, ?, ?)
         ''', (produit_id, quantite, prix_achat, note, date_actuelle))
         
-        # Mettre à jour le stock
+        # Enregistrer le LOT (FIFO) avec les nouvelles informations de cartons
+        ref_lot = data.get('reference_lot', f'LOT-{datetime.now().strftime("%y%m%d%H%M")}')
+        
+        cursor.execute('''
+            INSERT INTO lots_stock 
+            (produit_id, quantite_initiale, quantite_actuelle, prix_achat_unitaire, prix_vente_unitaire, 
+             date_peremption, frais_livraison_lot, reference_lot, date_reception, 
+             quantite_cartons, produits_par_carton, prix_carton, fournisseur)
+            VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)
+        ''', (produit_id, quantite, quantite, prix_achat, pvu, 
+              date_perempt, ref_lot, date_actuelle, 
+              quantite_cartons, produits_par_carton, prix_carton, fournisseur))
+
+        # Mettre à jour le prix_achat et prix_vente du produit dans le catalogue global
+        cursor.execute('''
+            UPDATE produits 
+            SET prix_achat = ?, prix_vente = ?, date_peremption = ?
+            WHERE id = ?
+        ''', (prix_achat, pvu, date_perempt, produit_id))
+
+        # Mettre à jour le stock global
         if stock_actuel:
             cursor.execute('''
                 UPDATE stocks 
@@ -79,19 +132,25 @@ def enregistrer_appro():
                 VALUES (?, ?, ?)
             ''', (produit_id, quantite, date_actuelle))
         
+        # Capturer le stock final sous forme détaillée (après insertion du nouveau lot)
+        stock_final_details = get_lots_details_str(cursor, produit_id)
+
         # Enregistrer dans l'historique
+        utilisateur_id = session.get('user_id')
         cursor.execute('''
             INSERT INTO historique_stock 
-            (produit_id, quantite_avant, quantite_apres, type, raison, date_mouvement)
-            VALUES (?, ?, ?, 'appro', ?, ?)
-        ''', (produit_id, ancien_stock, ancien_stock + quantite, note or 'Approvisionnement', date_actuelle))
+            (produit_id, quantite_avant, quantite_apres, type, raison, date_mouvement, utilisateur_id, 
+             stock_initial_details, stock_final_details, perte_financiere)
+            VALUES (?, ?, ?, 'appro', ?, ?, ?, ?, ?, 0)
+        ''', (produit_id, ancien_stock, ancien_stock + quantite, note or 'Approvisionnement', 
+              date_actuelle, utilisateur_id, stock_initial_details, stock_final_details))
         
         conn.commit()
         conn.close()
         
         return jsonify({
             'success': True,
-            'message': 'Approvisionnement enregistré avec succès',
+            'message': 'Approvisionnement et lot enregistrés avec succès',
             'nouveau_stock': ancien_stock + quantite
         })
         
@@ -241,13 +300,13 @@ def get_depenses_semaine():
 
 @appro_bp.route('/stats', methods=['GET'])
 def get_stats_appro():
-    """Retourne les statistiques des approvisionnements"""
+    """Retourne les statistiques des approvisionnements pour aujourd'hui"""
     try:
         conn = get_db()
         cursor = conn.cursor()
         
-        # Total dépenses 30 derniers jours
-        date_limite = (datetime.now() - timedelta(days=30)).date()
+        # Total dépenses aujourd'hui
+        date_aujourdhui = datetime.now().date().isoformat()
         
         cursor.execute('''
             SELECT 
@@ -255,8 +314,8 @@ def get_stats_appro():
                 COALESCE(SUM(quantite * prix_achat_unitaire), 0) as total_depenses,
                 COALESCE(SUM(quantite), 0) as total_articles
             FROM approvisionnements
-            WHERE DATE(date_appro) >= ?
-        ''', (date_limite.isoformat(),))
+            WHERE DATE(date_appro) = ?
+        ''', (date_aujourdhui,))
         
         stats = cursor.fetchone()
         

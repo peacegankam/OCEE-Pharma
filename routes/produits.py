@@ -96,8 +96,8 @@ def create_produit():
     try:
         data = request.get_json()
         
-        # Validation
-        required = ['nom', 'societe', 'prix_achat', 'prix_vente']
+        # Validation simplifiée
+        required = ['nom', 'societe']
         for field in required:
             if field not in data:
                 return jsonify({'success': False, 'message': f'Champ manquant: {field}'}), 400
@@ -110,20 +110,19 @@ def create_produit():
         conn = get_db()
         cursor = conn.cursor()
         
-        # Insertion produit
+        # Insertion produit avec prix_achat et prix_vente par défaut à 0
         cursor.execute('''
             INSERT INTO produits (nom, societe, prix_achat, prix_vente, seuil_alerte, date_peremption)
             VALUES (?, ?, ?, ?, ?, ?)
-        ''', (data['nom'], data['societe'], data['prix_achat'], data['prix_vente'], seuil, data.get('date_peremption')))
+        ''', (data['nom'], data['societe'], 0, 0, seuil, None))
         
         produit_id = cursor.lastrowid
         
-        # Création entrée stock avec quantité initiale
-        stock_init = data.get('stock_initial', 0)
+        # Création entrée stock avec quantité 0 par défaut
         cursor.execute('''
             INSERT INTO stocks (produit_id, quantite)
             VALUES (?, ?)
-        ''', (produit_id, stock_init))
+        ''', (produit_id, 0))
         
         conn.commit()
         conn.close()

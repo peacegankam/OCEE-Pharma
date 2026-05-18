@@ -147,9 +147,32 @@ def check_stock(produit_id):
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
+def get_lots_details_str(cursor, produit_id):
+    cursor.execute('''
+        SELECT date_reception, date_peremption, quantite_actuelle 
+        FROM lots_stock 
+        WHERE produit_id = ? AND quantite_actuelle > 0 
+        ORDER BY date_reception DESC
+    ''', (produit_id,))
+    lots = cursor.fetchall()
+    details = []
+    for lot in lots:
+        dt_raw = lot['date_reception']
+        dt_str = '—'
+        if dt_raw:
+            try:
+                if isinstance(dt_raw, str):
+                    dt_str = datetime.strptime(dt_raw[:10], '%Y-%m-%d').strftime('%d/%m/%Y')
+                else:
+                    dt_str = dt_raw.strftime('%d/%m/%Y')
+            except Exception:
+                dt_str = str(dt_raw)[:10]
+        details.append(f"{dt_str} {lot['quantite_actuelle']}")
+    return "\n".join(details)
+
 @stocks_bp.route('/ajuster', methods=['POST'])
 def ajuster_stock():
-    """Ajuste manuellement le stock d'un produit"""
+    """Ajuste manuellement le stock d'un produit (Retraits anomalies ou Correction inventaire négatif)"""
     try:
         data = request.get_json()
         
@@ -159,31 +182,86 @@ def ajuster_stock():
                 return jsonify({'success': False, 'message': f'Champ manquant: {field}'}), 400
         
         produit_id = data['produit_id']
-        quantite = data['quantite']
-        type_ajust = data['type']  # 'ajout' ou 'retrait'
+        quantite = int(data['quantite'])
+        type_ajust = data['type']  # 'retrait' ou 'correction' (correction = correction inventaire négatif, donc ajout (+))
         raison = data.get('raison', 'Ajustement manuel')
         
+        if quantite <= 0:
+            return jsonify({'success': False, 'message': 'La quantité doit être strictement positive'}), 400
+            
         conn = get_db()
         cursor = conn.cursor()
         
+        # Récupérer le produit
+        cursor.execute('SELECT * FROM produits WHERE id = ?', (produit_id,))
+        produit = cursor.fetchone()
+        if not produit:
+            conn.close()
+            return jsonify({'success': False, 'message': 'Produit non trouvé'}), 404
+            
         # Récupérer le stock actuel
         cursor.execute('SELECT quantite FROM stocks WHERE produit_id = ?', (produit_id,))
         stock_actuel = cursor.fetchone()
-        # Si la ligne de stock n'existe pas encore, la créer (ancien=0)
-        if not stock_actuel:
-            ancien = 0
-        else:
-            ancien = stock_actuel['quantite']
+        ancien = stock_actuel['quantite'] if stock_actuel else 0
 
-        if type_ajust == 'ajout':
-            nouveau = ancien + quantite
-        else:  # retrait
-            if ancien < quantite:
-                return jsonify({'success': False, 'message': 'Stock insuffisant pour le retrait'}), 400
-            nouveau = ancien - quantite
+        # Stock initial détaillé
+        stock_initial_details = get_lots_details_str(cursor, produit_id)
         
-        # Mettre à jour ou insérer le stock
+        perte_financiere = 0
         date_actuelle = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+        if type_ajust == 'retrait':
+            if ancien < quantite:
+                conn.close()
+                return jsonify({'success': False, 'message': 'Stock insuffisant pour le retrait'}), 400
+            
+            nouveau = ancien - quantite
+            
+            # Consommer en priorité les lots périmés
+            # Puis FIFO (par date_reception ASC)
+            today_str = datetime.now().date().isoformat()
+            cursor.execute('''
+                SELECT * FROM lots_stock
+                WHERE produit_id = ? AND quantite_actuelle > 0
+                ORDER BY 
+                    CASE WHEN date_peremption < ? THEN 0 ELSE 1 END ASC,
+                    date_reception ASC
+            ''', (produit_id, today_str))
+            lots = cursor.fetchall()
+            
+            restant = quantite
+            for lot in lots:
+                if restant <= 0:
+                    break
+                dispo = lot['quantite_actuelle']
+                prélève = min(dispo, restant)
+                
+                # Calculer la perte financière sur le prix d'achat de ce lot
+                perte_financiere += prélève * lot['prix_achat_unitaire']
+                
+                cursor.execute('''
+                    UPDATE lots_stock
+                    SET quantite_actuelle = quantite_actuelle - ?
+                    WHERE id = ?
+                ''', (prélève, lot['id']))
+                
+                restant -= prélève
+                
+        elif type_ajust == 'correction':
+            nouveau = ancien + quantite
+            
+            # Correction (+), on crée un lot de type CORRECTION
+            prix_achat = produit['prix_achat'] or 0
+            pvu = produit['prix_vente'] or 0
+            cursor.execute('''
+                INSERT INTO lots_stock (produit_id, quantite_initiale, quantite_actuelle, prix_achat_unitaire, prix_vente_unitaire, date_peremption, reference_lot, date_reception)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (produit_id, quantite, quantite, prix_achat, pvu, None, 'CORRECTION', date_actuelle))
+        else:
+            conn.close()
+            return jsonify({'success': False, 'message': 'Type d\'ajustement invalide'}), 400
+        
+        # Mettre à jour le stock global
         if stock_actuel:
             cursor.execute('''
                 UPDATE stocks 
@@ -195,15 +273,23 @@ def ajuster_stock():
                 INSERT INTO stocks (produit_id, quantite, derniere_maj)
                 VALUES (?, ?, ?)
             ''', (produit_id, nouveau, date_actuelle))
+            
+        # Stock final détaillé
+        stock_final_details = get_lots_details_str(cursor, produit_id)
         
         # Enregistrer dans l'historique
         from flask import session
         utilisateur_id = session.get('user_id')
+        
+        type_mouvement = 'Ajustement (-)' if type_ajust == 'retrait' else 'Correction (+)'
+        
         cursor.execute('''
             INSERT INTO historique_stock 
-            (produit_id, quantite_avant, quantite_apres, type, raison, date_mouvement, utilisateur_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (produit_id, ancien, nouveau, type_ajust, raison, date_actuelle, utilisateur_id))
+            (produit_id, quantite_avant, quantite_apres, type, raison, date_mouvement, utilisateur_id,
+             stock_initial_details, stock_final_details, perte_financiere)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (produit_id, ancien, nouveau, type_mouvement, raison, date_actuelle, utilisateur_id,
+              stock_initial_details, stock_final_details, perte_financiere))
         
         conn.commit()
         conn.close()
@@ -212,7 +298,8 @@ def ajuster_stock():
             'success': True,
             'message': 'Stock ajusté avec succès',
             'ancien': ancien,
-            'nouveau': nouveau
+            'nouveau': nouveau,
+            'perte_financiere': perte_financiere
         })
         
     except Exception as e:

@@ -19,48 +19,24 @@
                     
                     <div class="form-group">
                         <label for="produit-nom">Nom du médicament</label>
-                        <select id="produit-nom" name="nom" required>
-                            <option value="">— Sélectionner un produit —</option>
-                        </select>
+                        <input type="text" id="produit-nom" name="nom" required placeholder="Ex: Paracétamol 500mg" />
                     </div>
 
                     <div class="form-group">
                         <label for="produit-societe">Société / Famille</label>
-                        <select id="produit-societe" name="societe" required onchange="chargerProduitsParSociete()">
-                            <option value="">— Sélectionner —</option>
-                            <option value="Antibiotiques">Antibiotiques</option>
-                            <option value="Analgésiques">Analgésiques</option>
-                            <option value="Vitamines">Vitamines</option>
-                            <option value="Dermatologie">Dermatologie</option>
-                            <option value="Matériel Médical">Matériel Médical</option>
-                        </select>
-                    </div>
-
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="produit-prix-achat">Prix Achat (unit)</label>
-                            <input type="number" id="produit-prix-achat" name="prix_achat" min="0" value="0" />
-                        </div>
-                        <div class="form-group">
-                            <label for="produit-prix-vente">Prix Vente (unit)</label>
-                            <input type="number" id="produit-prix-vente" name="prix_vente" min="0" required />
-                        </div>
-                    </div>
-
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="produit-stock">Stock Initial</label>
-                            <input type="number" id="produit-stock" name="stock_actuel" min="0" value="0" />
-                        </div>
-                        <div class="form-group">
-                            <label for="produit-seuil">Seuil Alerte</label>
-                            <input type="number" id="produit-seuil" name="seuil_alerte" min="1" value="10" />
-                        </div>
+                        <input type="text" id="produit-societe" name="societe" required list="societes-list" placeholder="Ex: Antibiotiques" />
+                        <datalist id="societes-list">
+                            <option value="Antibiotiques">
+                            <option value="Analgésiques">
+                            <option value="Vitamines">
+                            <option value="Dermatologie">
+                            <option value="Matériel Médical">
+                        </datalist>
                     </div>
 
                     <div class="form-group">
-                        <label for="produit-peremption">Date de péremption</label>
-                        <input type="date" id="produit-peremption" name="date_peremption" />
+                        <label for="produit-seuil">Seuil Alerte</label>
+                        <input type="number" id="produit-seuil" name="seuil_alerte" min="1" value="10" />
                     </div>
 
                     <div class="form-actions mt-1">
@@ -118,51 +94,19 @@
 
     document.addEventListener('DOMContentLoaded', () => {
         chargerProduits();
-        chargerTousProduits(); // Charger tous les produits au démarrage
         document.getElementById('form-produit').addEventListener('submit', soumettreProduit);
     });
 
-    // Charger tous les produits et les stocker
-    async function chargerTousProduits() {
+    async function chargerProduits() {
         try {
             const res = await fetch('/api/produits/?with_stock=true');
             const data = await res.json();
             if (data.success) {
                 tousProduits = data.produits;
+                afficherTableProduits(data.produits);
             }
         } catch (error) {
             console.error('Erreur chargement produits:', error);
-        }
-    }
-
-    // Charger les produits d'une société sélectionnée
-    function chargerProduitsParSociete() {
-        const societe = document.getElementById('produit-societe').value;
-        const selectNom = document.getElementById('produit-nom');
-        
-        if (!societe) {
-            selectNom.innerHTML = '<option value="">— Sélectionner un produit —</option>';
-            return;
-        }
-
-        // Filtrer les produits de la société sélectionnée
-        const produitsSociete = tousProduits.filter(p => p.societe === societe);
-        
-        if (produitsSociete.length === 0) {
-            selectNom.innerHTML = '<option value="">Aucun produit pour cette société</option>';
-            return;
-        }
-
-        // Remplir le select avec les produits
-        selectNom.innerHTML = '<option value="">— Sélectionner un produit —</option>' +
-            produitsSociete.map(p => `<option value="${p.nom}">${p.nom} (Stock: ${p.stock_actuel})</option>`).join('');
-    }
-
-    async function chargerProduits() {
-        const res = await fetch('/api/produits/?with_stock=true');
-        const data = await res.json();
-        if (data.success) {
-            afficherTableProduits(data.produits);
         }
     }
 
@@ -230,18 +174,16 @@
         document.getElementById('produit-societe').value = p.societe;
         
         // Charger les produits de la société et sélectionner le produit actuel
-        chargerProduitsParSociete();
+        if (typeof chargerProduitsParSociete === 'function') {
+            chargerProduitsParSociete();
+        }
         
         // Attendre que le select soit rempli et sélectionner le produit
         setTimeout(() => {
             document.getElementById('produit-nom').value = p.nom;
         }, 100);
         
-        document.getElementById('produit-prix-achat').value = p.prix_achat;
-        document.getElementById('produit-prix-vente').value = p.prix_vente;
-        document.getElementById('produit-stock').value = p.stock_actuel;
         document.getElementById('produit-seuil').value = p.seuil_alerte;
-        document.getElementById('produit-peremption').value = p.date_peremption || '';
 
         document.getElementById('form-produit-titre').textContent = '✏️ Modifier Produit';
         document.getElementById('btn-save-produit').textContent = 'Mettre à jour';

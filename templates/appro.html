@@ -62,32 +62,48 @@
                     </div>
 
                     <div class="form-group">
-                        <label for="appro-quantite">Quantité reçue</label>
-                        <div class="qty-control">
-                            <button type="button" class="qty-btn" onclick="ajusterQteAppro(-1)">−</button>
-                            <input type="number" id="appro-quantite" name="quantite" min="1" value="1"
-                                onchange="calculerCoutUnitaire()" />
-                            <button type="button" class="qty-btn" onclick="ajusterQteAppro(1)">+</button>
+                        <label for="appro-paup">Prix d'Achat Unitaire Produit (PAUP) en FCFA</label>
+                        <input type="number" id="appro-paup" name="prix_achat_unitaire" min="1" required placeholder="Saisir PAUP" oninput="calculerPrixCartonEtTotal()" />
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="appro-cartons">Nombre de cartons</label>
+                            <input type="number" id="appro-cartons" name="quantite_cartons" min="1" value="1" required oninput="calculerPrixCartonEtTotal()" />
+                        </div>
+                        <div class="form-group">
+                            <label for="appro-par-carton">Produits par carton</label>
+                            <input type="number" id="appro-par-carton" name="produits_par_carton" min="1" value="1" required oninput="calculerPrixCartonEtTotal()" />
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="appro-prix-carton">Prix total carton (FCFA)</label>
+                            <input type="number" id="appro-prix-carton" name="prix_carton" min="0" readonly style="background: var(--bg-dark); color: var(--text-light);" />
+                        </div>
+                        <div class="form-group">
+                            <label for="appro-cout">Coût total payé (FCFA)</label>
+                            <input type="number" id="appro-cout" name="cout_total" min="0" value="0" />
                         </div>
                     </div>
 
                     <div class="form-group">
-                        <label for="appro-cout">Coût total payé (FCFA)</label>
-                        <input type="number" id="appro-cout" name="cout_total" min="0" value="0"
-                            oninput="calculerCoutUnitaire()" />
-                    </div>
-
-                    <!-- Cout unitaire calculé -->
-                    <div class="prix-panel" id="cout-unitaire-panel" style="display:none;">
-                        <div class="prix-ligne">
-                            <span class="prix-label">Coût unitaire calculé</span>
-                            <span class="prix-val" id="cout-unitaire">— FCFA</span>
-                        </div>
+                        <label for="appro-peremption-new">Date de péremption (obligatoire)</label>
+                        <input type="date" id="appro-peremption-new" name="date_peremption" required />
                     </div>
 
                     <div class="form-group">
                         <label for="appro-fournisseur">Fournisseur / livreur</label>
-                        <input type="text" id="appro-fournisseur" name="fournisseur" placeholder="Optionnel" />
+                        <input type="text" id="appro-fournisseur" name="fournisseur" placeholder="Ex: Sopharm" />
+                    </div>
+
+                    <!-- Cout unitaire et vente calculés -->
+                    <div class="prix-panel" id="cout-unitaire-panel" style="display:none; margin-bottom: 20px;">
+                        <div class="prix-ligne">
+                            <span class="prix-label">Prix de Vente Unitaire (PVU) calculé (marge 1.5)</span>
+                            <span class="prix-val text-orange" id="appro-pvu" style="font-weight: bold; color: var(--orange);">— FCFA</span>
+                        </div>
                     </div>
 
                     <button id="btn-enregistrer-livraison" type="submit" class="btn btn-primary btn-full btn-lg">
@@ -438,19 +454,30 @@
     function soumettreAppro(e) {
         e.preventDefault();
         const id = document.getElementById('appro-produit').value;
-        const qte = parseInt(document.getElementById('appro-quantite').value);
+        const paup = parseFloat(document.getElementById('appro-paup').value);
+        const cartons = parseInt(document.getElementById('appro-cartons').value);
+        const parCarton = parseInt(document.getElementById('appro-par-carton').value);
+        const prixCarton = parseFloat(document.getElementById('appro-prix-carton').value);
         const coutTotal = parseFloat(document.getElementById('appro-cout').value);
+        const datePeremption = document.getElementById('appro-peremption-new').value;
+        const fournisseur = document.getElementById('appro-fournisseur').value;
         
-        if (!id || !qte || isNaN(coutTotal)) {
-            afficherNotif('Veuillez remplir tous les champs', 'warning');
+        if (!id || isNaN(paup) || isNaN(cartons) || isNaN(parCarton) || isNaN(coutTotal) || !datePeremption) {
+            afficherNotif('Veuillez remplir tous les champs obligatoires', 'warning');
             return;
         }
 
         const data = {
             produit_id: parseInt(id),
-            quantite: qte,
-            prix_achat_unitaire: coutTotal / qte,
-            note: document.getElementById('appro-fournisseur').value
+            quantite: cartons * parCarton,
+            prix_achat_unitaire: paup,
+            quantite_cartons: cartons,
+            produits_par_carton: parCarton,
+            prix_carton: prixCarton,
+            cout_total: coutTotal,
+            date_peremption: datePeremption,
+            fournisseur: fournisseur,
+            note: `Approvisionnement: ${cartons} cartons de ${parCarton} (Fournisseur: ${fournisseur || 'N/A'})`
         };
 
         fetch('/api/appro/', {
@@ -477,23 +504,27 @@
             });
     }
 
-    function calculerCoutUnitaire() {
-        const qte = parseFloat(document.getElementById('appro-quantite').value) || 0;
-        const cout = parseFloat(document.getElementById('appro-cout').value) || 0;
+    function calculerPrixCartonEtTotal() {
+        const paup = parseFloat(document.getElementById('appro-paup').value) || 0;
+        const cartons = parseInt(document.getElementById('appro-cartons').value) || 0;
+        const parCarton = parseInt(document.getElementById('appro-par-carton').value) || 0;
+        
+        const prixCarton = paup * parCarton;
+        document.getElementById('appro-prix-carton').value = prixCarton;
+        
+        const coutTotal = prixCarton * cartons;
+        document.getElementById('appro-cout').value = coutTotal;
+        
+        const pvu = paup * 1.5;
+        
         const panel = document.getElementById('cout-unitaire-panel');
-        if (qte > 0 && cout > 0) {
+        const pvuEl = document.getElementById('appro-pvu');
+        if (paup > 0) {
             panel.style.display = 'block';
-            document.getElementById('cout-unitaire').textContent =
-                Math.round(cout / qte).toLocaleString('fr-FR') + ' FCFA';
+            pvuEl.textContent = Math.round(pvu).toLocaleString('fr-FR') + ' FCFA';
         } else {
             panel.style.display = 'none';
         }
-    }
-
-    function ajusterQteAppro(delta) {
-        const input = document.getElementById('appro-quantite');
-        input.value = Math.max(1, parseInt(input.value || 1) + delta);
-        calculerCoutUnitaire();
     }
 
     function chargerGraphiqueDepenses() {

@@ -53,7 +53,7 @@ def login_required(f):
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    """Page de sélection de profil (Point de Vente) / Traitement login"""
+    """Traitement de la connexion par Nom d'utilisateur + PIN/Mot de passe"""
     import database
     
     conn = database.get_db()
@@ -68,24 +68,29 @@ def login():
     utilisateurs = [dict(row) for row in cursor.fetchall()]
     
     if request.method == 'POST':
-        user_id = request.form.get('user_id')
+        username = request.form.get('username', '').strip()
         pin = request.form.get('pin', '')
         
-        cursor.execute("SELECT * FROM utilisateurs WHERE id = ?", (user_id,))
+        cursor.execute("SELECT * FROM utilisateurs WHERE LOWER(nom) = LOWER(?)", (username,))
         user = cursor.fetchone()
         conn.close()
         
         if user:
             # Vérifier le PIN si l'utilisateur en a un
             if user['code_pin'] and user['code_pin'] != pin:
-                return render_template('login.html', error="Code PIN incorrect", nom_bar=nom_actuel, utilisateurs=utilisateurs)
+                return render_template('login.html', error="Mot de passe ou PIN incorrect", nom_bar=nom_actuel, utilisateurs=utilisateurs)
                 
             session['user_id'] = user['id']
             session['nom'] = user['nom']
             session['role'] = user['role']
             
-            # Rediriger tout le monde vers le dashboard (qui s'adapte au rôle)
-            return redirect(url_for('index'))
+            # Rediriger dynamiquement : Admin -> Dashboard principal (/), Employé/Vendeur -> Caisse (/caisse)
+            if user['role'] == 'admin':
+                return redirect(url_for('index'))
+            else:
+                return redirect(url_for('caisse_page'))
+        else:
+            return render_template('login.html', error="Nom d'utilisateur inconnu", nom_bar=nom_actuel, utilisateurs=utilisateurs)
             
     conn.close()
     return render_template('login.html', nom_bar=nom_actuel, utilisateurs=utilisateurs)
