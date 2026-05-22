@@ -226,7 +226,6 @@ def rapport_journalier():
         total_appro = sum(a['total'] for a in appros)
         summary_data = [
             ['Total ventes', f"{totals['total_ventes']:,.0f} FCFA"],
-            ['Dépenses appro.', f"{total_appro:,.0f} FCFA"],
             ['Bénéfice', f"{totals['total_benefice']:,.0f} FCFA"],
             ['Nombre de ventes', str(totals['nb_ventes'])],
             ['Articles vendus', str(totals['total_articles'])],

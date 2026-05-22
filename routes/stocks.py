@@ -1,5 +1,5 @@
 # routes/stocks.py - Routes pour la gestion des stocks
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, session
 from database import get_db
 from datetime import datetime, timedelta
 
@@ -16,8 +16,9 @@ def get_stocks():
             SELECT 
                 p.id,
                 p.nom,
-                p.societe,
+                p.societe AS societe,
                 p.seuil_alerte,
+
                 COALESCE(s.quantite, 0) as quantite,
                 COALESCE(
                     SUM(l.quantite_actuelle * l.prix_achat_unitaire) / NULLIF(SUM(l.quantite_actuelle), 0),
@@ -182,24 +183,33 @@ def get_lots_details_str(cursor, produit_id):
 
 @stocks_bp.route('/ajuster', methods=['POST'])
 def ajuster_stock():
-    """Ajuste manuellement le stock d'un produit (retrait d'anomalie, casse, péremption)"""
+    """Ajuste manuellement le stock d'un produit (ajout ou retrait)."""
     try:
         data = request.get_json()
         
-        required = ['produit_id', 'raison']
+        required = ['produit_id', 'type']
         for field in required:
             if field not in data:
                 return jsonify({'success': False, 'message': f'Champ manquant: {field}'}), 400
         
         produit_id = data['produit_id']
-        raison = data['raison']
+        action_type = data['type']
+        raison = data.get('raison', '').strip()
         quantite = int(data.get('quantite', 0))
         
-        if raison not in ['Retrait produit périmé', 'Casse', 'Correction inventaire négatif']:
-            return jsonify({'success': False, 'message': 'Motif invalide'}), 400
+        # Valider raison : doit être une des valeurs autorisées
+        raisons_valides = ['Retrait produit périmé', 'Casse']
+        if action_type == 'retrait' and raison not in raisons_valides:
+            return jsonify({'success': False, 'message': f'Raison invalide. Valeurs autorisées : {", ".join(raisons_valides)}'}), 400
+        
+        if action_type not in ['ajout', 'retrait']:
+            return jsonify({'success': False, 'message': 'Type d\'action invalide'}), 400
 
-        if raison != 'Retrait produit périmé' and quantite <= 0:
-            return jsonify({'success': False, 'message': 'La quantité doit être strictement positive'}), 400
+        if action_type == 'ajout' and quantite <= 0:
+            return jsonify({'success': False, 'message': 'La quantité doit être strictement positive pour un ajout'}), 400
+
+        if action_type == 'retrait' and quantite <= 0 and raison != 'Retrait produit périmé':
+            return jsonify({'success': False, 'message': 'La quantité doit être strictement positive pour un retrait'}), 400
         
         conn = get_db()
         cursor = conn.cursor()
@@ -218,72 +228,107 @@ def ajuster_stock():
         perte_financiere = 0
         date_actuelle = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-        today_str = datetime.now().date().isoformat()
-        cursor.execute('''
-            SELECT * FROM lots_stock
-            WHERE produit_id = ? AND quantite_actuelle > 0
-            ORDER BY 
-                CASE WHEN date_peremption <= ? THEN 0 ELSE 1 END ASC,
-                date_reception ASC
-        ''', (produit_id, today_str))
-        lots = cursor.fetchall()
+        if action_type == 'ajout':
+            prix_achat_unit = produit['prix_achat'] or 0
+            prix_vente_unit = produit['prix_vente'] if produit['prix_vente'] is not None else prix_achat_unit
+            reference_lot = f'AJUST-{produit_id}-{datetime.now().strftime("%Y%m%d%H%M%S")}'
 
-        if raison == 'Retrait produit périmé':
+            cursor.execute('''
+                INSERT INTO lots_stock (
+                    produit_id, quantite_initiale, quantite_actuelle,
+                    prix_achat_unitaire, prix_vente_unitaire, date_reception,
+                    date_peremption, reference_lot
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                produit_id, quantite, quantite, prix_achat_unit,
+                prix_vente_unit, date_actuelle, None, reference_lot
+            ))
+
+            nouveau = ancien + quantite
+            if stock_actuel:
+                cursor.execute('UPDATE stocks SET quantite = ?, derniere_maj = ? WHERE produit_id = ?', (nouveau, date_actuelle, produit_id))
+            else:
+                cursor.execute('INSERT INTO stocks (produit_id, quantite, derniere_maj) VALUES (?, ?, ?)', (produit_id, nouveau, date_actuelle))
+
+            stock_final_details = get_lots_details_str(cursor, produit_id)
+            utilisateur_id = session.get('user_id')
+            raison = raison or 'Ajustement manuel (ajout)'
+
+            cursor.execute('''
+                INSERT INTO historique_stock 
+                (produit_id, quantite_avant, quantite_apres, type, raison, date_mouvement, utilisateur_id,
+                 stock_initial_details, stock_final_details, perte_financiere)
+                VALUES (?, ?, ?, 'ajout', ?, ?, ?, ?, ?, ?)
+            ''', (produit_id, ancien, nouveau, raison, date_actuelle, utilisateur_id,
+                  stock_initial_details, stock_final_details, 0))
+        else:
+            today_str = datetime.now().date().isoformat()
             cursor.execute('''
                 SELECT * FROM lots_stock
-                WHERE produit_id = ? AND quantite_actuelle > 0 AND date_peremption <= ?
-                ORDER BY date_peremption ASC, date_reception ASC
+                WHERE produit_id = ? AND quantite_actuelle > 0
+                ORDER BY 
+                    CASE WHEN date_peremption <= ? THEN 0 ELSE 1 END ASC,
+                    date_reception ASC
             ''', (produit_id, today_str))
-            lots_perimes = cursor.fetchall()
-            total_perimes = sum(l['quantite_actuelle'] for l in lots_perimes)
+            lots = cursor.fetchall()
 
-            if total_perimes == 0:
-                conn.close()
-                return jsonify({'success': False, 'message': 'Aucun lot périmé à retirer'}), 400
+            if raison == 'Retrait produit périmé':
+                cursor.execute('''
+                    SELECT * FROM lots_stock
+                    WHERE produit_id = ? AND quantite_actuelle > 0 AND date_peremption <= ?
+                    ORDER BY date_peremption ASC, date_reception ASC
+                ''', (produit_id, today_str))
+                lots_perimes = cursor.fetchall()
+                total_perimes = sum(l['quantite_actuelle'] for l in lots_perimes)
 
-            quantite = total_perimes
-            restant = quantite
-            for lot in lots_perimes:
-                if restant <= 0:
-                    break
-                disponible = lot['quantite_actuelle']
-                preleve = min(disponible, restant)
-                perte_financiere += preleve * lot['prix_achat_unitaire']
-                cursor.execute('UPDATE lots_stock SET quantite_actuelle = quantite_actuelle - ? WHERE id = ?', (preleve, lot['id']))
-                restant -= preleve
+                if total_perimes == 0:
+                    conn.close()
+                    return jsonify({'success': False, 'message': 'Aucun lot périmé à retirer'}), 400
 
-        else:
-            total_disponible = sum(l['quantite_actuelle'] for l in lots)
-            if total_disponible < quantite:
-                conn.close()
-                return jsonify({'success': False, 'message': 'Stock insuffisant pour le retrait'}), 400
+                quantite = total_perimes
+                restant = quantite
+                for lot in lots_perimes:
+                    if restant <= 0:
+                        break
+                    disponible = lot['quantite_actuelle']
+                    preleve = min(disponible, restant)
+                    perte_financiere += preleve * lot['prix_achat_unitaire']
+                    cursor.execute('UPDATE lots_stock SET quantite_actuelle = quantite_actuelle - ? WHERE id = ?', (preleve, lot['id']))
+                    restant -= preleve
+            else:
+                total_disponible = sum(l['quantite_actuelle'] for l in lots)
+                if total_disponible < quantite:
+                    conn.close()
+                    return jsonify({'success': False, 'message': 'Stock insuffisant pour le retrait'}), 400
 
-            restant = quantite
-            for lot in lots:
-                if restant <= 0:
-                    break
-                disponible = lot['quantite_actuelle']
-                preleve = min(disponible, restant)
-                perte_financiere += preleve * lot['prix_achat_unitaire']
-                cursor.execute('UPDATE lots_stock SET quantite_actuelle = quantite_actuelle - ? WHERE id = ?', (preleve, lot['id']))
-                restant -= preleve
+                restant = quantite
+                for lot in lots:
+                    if restant <= 0:
+                        break
+                    disponible = lot['quantite_actuelle']
+                    preleve = min(disponible, restant)
+                    perte_financiere += preleve * lot['prix_achat_unitaire']
+                    cursor.execute('UPDATE lots_stock SET quantite_actuelle = quantite_actuelle - ? WHERE id = ?', (preleve, lot['id']))
+                    restant -= preleve
 
-        nouveau = max(0, ancien - quantite)
-        if stock_actuel:
-            cursor.execute('UPDATE stocks SET quantite = ?, derniere_maj = ? WHERE produit_id = ?', (nouveau, date_actuelle, produit_id))
-        else:
-            cursor.execute('INSERT INTO stocks (produit_id, quantite, derniere_maj) VALUES (?, ?, ?)', (produit_id, nouveau, date_actuelle))
+            nouveau = max(0, ancien - quantite)
+            if stock_actuel:
+                cursor.execute('UPDATE stocks SET quantite = ?, derniere_maj = ? WHERE produit_id = ?', (nouveau, date_actuelle, produit_id))
+            else:
+                cursor.execute('INSERT INTO stocks (produit_id, quantite, derniere_maj) VALUES (?, ?, ?)', (produit_id, nouveau, date_actuelle))
 
-        stock_final_details = get_lots_details_str(cursor, produit_id)
-        utilisateur_id = session.get('user_id')
+            stock_final_details = get_lots_details_str(cursor, produit_id)
+            utilisateur_id = session.get('user_id')
+            raison = raison or 'Ajustement manuel (retrait)'
 
-        cursor.execute('''
-            INSERT INTO historique_stock 
-            (produit_id, quantite_avant, quantite_apres, type, raison, date_mouvement, utilisateur_id,
-             stock_initial_details, stock_final_details, perte_financiere)
-            VALUES (?, ?, ?, 'retrait', ?, ?, ?, ?, ?, ?)
-        ''', (produit_id, ancien, nouveau, raison, date_actuelle, utilisateur_id,
-              stock_initial_details, stock_final_details, perte_financiere))
+            cursor.execute('''
+                INSERT INTO historique_stock 
+                (produit_id, quantite_avant, quantite_apres, type, raison, date_mouvement, utilisateur_id,
+                 stock_initial_details, stock_final_details, perte_financiere)
+                VALUES (?, ?, ?, 'retrait', ?, ?, ?, ?, ?, ?)
+            ''', (produit_id, ancien, nouveau, raison, date_actuelle, utilisateur_id,
+                  stock_initial_details, stock_final_details, perte_financiere))
+
 
         conn.commit()
         conn.close()
@@ -366,11 +411,35 @@ def get_alertes():
         ''')
         
         alertes = cursor.fetchall()
+        # Produits périmés (médicaments)
+        try:
+            today_str = datetime.now().date().isoformat()
+            cursor.execute('''
+                SELECT p.id as produit_id, p.nom as produit, p.societe, COALESCE(s.quantite, 0) as stock_actuel,
+                       MIN(l.date_peremption) as date_peremption, SUM(l.quantite_actuelle) as total_perimes
+                FROM lots_stock l
+                JOIN produits p ON l.produit_id = p.id
+                LEFT JOIN stocks s ON s.produit_id = p.id
+                WHERE l.quantite_actuelle > 0
+                  AND l.date_peremption IS NOT NULL
+                  AND DATE(l.date_peremption) < ?
+                GROUP BY p.id
+                ORDER BY MIN(l.date_peremption) ASC
+            ''', (today_str,))
+            perimes_rows = cursor.fetchall()
+            perimes = [dict(p) for p in perimes_rows]
+            perimes_count = sum(p.get('total_perimes', 0) or 0 for p in perimes)
+        except Exception:
+            perimes = []
+            perimes_count = 0
+
         conn.close()
-        
+
         return jsonify({
             'success': True,
-            'alertes': [dict(a) for a in alertes]
+            'alertes': [dict(a) for a in alertes],
+            'perimes': perimes,
+            'perimes_count': perimes_count
         })
         
     except Exception as e:
@@ -410,10 +479,11 @@ def get_historique():
         
         query = '''
             SELECT 
-                h.*,
+                h.*, 
                 p.nom as produit,
-                p.societe,
+                p.societe as societe,
                 u.nom as auteur_nom,
+
                 u.role as auteur_role
             FROM historique_stock h
             JOIN produits p ON h.produit_id = p.id
@@ -437,9 +507,22 @@ def get_historique():
         historique = cursor.fetchall()
         conn.close()
         
+        mouvements = []
+        for h in historique:
+            row = dict(h)
+            # on retire les infos non demandées pour l'inventaire complet / affichage lisible
+            row.pop('societe', None)
+            row.pop('fournisseur', None)
+
+            if not row.get('auteur_nom'):
+                row['auteur_nom'] = 'Gérant'
+                row['auteur_role'] = 'admin'
+            mouvements.append(row)
+
+
         return jsonify({
             'success': True,
-            'mouvements': [dict(h) for h in historique]
+            'mouvements': mouvements
         })
         
     except Exception as e:

@@ -6,7 +6,8 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, 'data', 'pharma.sqlite')
 
 # Configuration Base de données (Type: 'sqlite' ou 'mysql')
-DB_TYPE = 'mysql'
+# Utiliser la base locale SQLite par défaut pour le développement
+DB_TYPE = 'sqlite'
 DB_HOST = 'localhost'
 DB_USER = 'root'
 DB_PASSWORD = ''
@@ -17,7 +18,7 @@ NOM_BAR = "OCEE PHARMA"
 DEVISE = "FCFA"
 
 # Seuils stock par défaut
-SEUIL_STOCK_DEFAUT = 10
+SEUIL_STOCK_DEFAUT = 20
 ALERTE_CRITIQUE_RATIO = 0.5  # En dessous de 50% du seuil → critique
 
 # Admin PIN

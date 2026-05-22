@@ -1,8 +1,6 @@
 8# routes/dashboard.py - Routes pour les données du dashboard principal
 from flask import Blueprint, jsonify, request
 from datetime import datetime, timedelta
-import sqlite3
-import random
 
 from database import (
     get_db,
@@ -21,12 +19,38 @@ dashboard_bp = Blueprint('dashboard', __name__)
 def get_kpis():
     """Retourne les KPIs pour le dashboard"""
     try:
-        # Récupérer les stats depuis la base de données
-        stats = get_stats_globales()
-        
-        # Calculer le nombre d'alertes (stock + péremption)
         conn = get_db()
         cursor = conn.cursor()
+        today = datetime.now().date().isoformat()
+        
+        # Ventes du jour (nombre et revenus)
+        cursor.execute('''
+            SELECT COUNT(*) as nb_ventes, COALESCE(SUM(v.quantite * v.prix_unitaire), 0) as revenus
+            FROM ventes v
+            WHERE DATE(REPLACE(v.date_vente, 'T', ' ')) = ?
+        ''', (today,))
+        row = cursor.fetchone()
+        ventes_jour = row['nb_ventes'] if row else 0
+        revenus_jour = row['revenus'] if row else 0
+        
+        # Bénéfice du jour (sur les ventes enregistrées)
+        cursor.execute('''
+            SELECT COALESCE(SUM(vl.quantite * (v.prix_unitaire - vl.prix_achat_unitaire)), 0) as benefice
+            FROM ventes v
+            JOIN vente_lots vl ON v.id = vl.vente_id
+            WHERE DATE(REPLACE(v.date_vente, 'T', ' ')) = ?
+        ''', (today,))
+        row = cursor.fetchone()
+        benefice_jour = row['benefice'] if row else 0
+        
+        # Pertes du jour (retraits stock)
+        cursor.execute('''
+            SELECT COALESCE(SUM(perte_financiere), 0) as pertes
+            FROM historique_stock
+            WHERE DATE(REPLACE(date_mouvement, 'T', ' ')) = ? AND type = 'retrait'
+        ''', (today,))
+        row = cursor.fetchone()
+        pertes_jour = row['pertes'] if row else 0
         
         # Alertes stock critiques
         cursor.execute('''
@@ -38,30 +62,49 @@ def get_kpis():
         row = cursor.fetchone()
         alertes_stock = row['count'] if row else 0
         
-        # Alertes péremption critiques (< 7 jours)
+        # Médicaments périmés (TOUS les lots périmés, pas juste médicaments)
         cursor.execute('''
-            SELECT COUNT(*) as count
-            FROM produits p
-            WHERE p.date_peremption IS NOT NULL
-            AND date(p.date_peremption) <= date('now', '+7 day')
-            AND date(p.date_peremption) >= date('now')
+            SELECT COUNT(DISTINCT l.produit_id) as count
+            FROM lots_stock l
+            WHERE l.quantite_actuelle > 0
+              AND l.date_peremption IS NOT NULL
+              AND DATE(l.date_peremption) < DATE('now')
         ''')
         row = cursor.fetchone()
-        alertes_peremption = row['count'] if row else 0
+        alertes_perimes = row['count'] if row else 0
+        
+        total_alertes = alertes_stock + alertes_perimes
+        
+        # Revenus du mois
+        debut_mois = datetime.now().replace(day=1).date().isoformat()
+        cursor.execute('''
+            SELECT COALESCE(SUM(v.quantite * v.prix_unitaire), 0) as revenus
+            FROM ventes v
+            WHERE DATE(REPLACE(v.date_vente, 'T', ' ')) BETWEEN ? AND ?
+        ''', (debut_mois, today))
+        row = cursor.fetchone()
+        revenus_mensuel = row['revenus'] if row else 0
+        
+        # Revenus total
+        cursor.execute('''
+            SELECT COALESCE(SUM(v.quantite * v.prix_unitaire), 0) as revenus
+            FROM ventes v
+        ''')
+        row = cursor.fetchone()
+        revenus_total = row['revenus'] if row else 0
         
         conn.close()
         
-        total_alertes = alertes_stock + alertes_peremption
-        
         return jsonify({
             'success': True,
-            'revenus_jour': stats.get('revenus_jour', 0),
-            'ventes_jour': stats.get('ventes_jour', 0),
-            'benefice_jour': stats.get('benefice_jour', 0),
-            'pertes_jour': stats.get('pertes_jour', 0),
+            'revenus_jour': revenus_jour,
+            'ventes_jour': ventes_jour,
+            'benefice_jour': benefice_jour,
+            'pertes_jour': pertes_jour,
             'alertes_stock': total_alertes,
-            'revenus_mensuel': get_revenus_mensuel(),
-            'revenus_total': get_revenus_total()
+            'alertes_perimes': alertes_perimes,
+            'revenus_mensuel': revenus_mensuel,
+            'revenus_total': revenus_total
         })
     except Exception as e:
         print(f"Erreur dashboard/kpis: {str(e)}")
@@ -241,11 +284,14 @@ def get_stocks_critiques_route():
         # 3. Péremptions (périmés ou dans moins de 30 jours)
         try:
             cursor.execute('''
-                SELECT p.id, p.nom, p.societe, p.date_peremption, s.quantite
-                FROM produits p
-                JOIN stocks s ON p.id = s.produit_id
-                WHERE p.date_peremption IS NOT NULL
-                AND date(p.date_peremption) <= date('now', '+30 day')
+                SELECT DISTINCT p.id, p.nom, p.societe, MIN(l.date_peremption) as date_peremption,
+                       COALESCE(s.quantite, 0) as quantite
+                FROM lots_stock l
+                JOIN produits p ON l.produit_id = p.id
+                LEFT JOIN stocks s ON s.produit_id = p.id
+                WHERE l.quantite_actuelle > 0 AND l.date_peremption IS NOT NULL
+                   AND DATE(l.date_peremption) <= DATE('now', '+30 day')
+                GROUP BY p.id
             ''')
             rows = cursor.fetchall()
             today = datetime.now().date()
@@ -253,11 +299,11 @@ def get_stocks_critiques_route():
                 dp = datetime.fromisoformat(str(r['date_peremption'])).date()
                 jours = (dp - today).days
                 if jours < 0:
-                    niveau, msg = 'critique', f"PÉRIMÉ ({abs(jours)}j)"
+                    niveau, msg = 'critique', f"🔴 PÉRIMÉ ({abs(jours)}j)"
                 elif jours <= 7:
-                    niveau, msg = 'warning', f"Périme dans {jours}j"
+                    niveau, msg = 'warning', f"⏰ Périme dans {jours}j"
                 else:
-                    niveau, msg = 'faible', f"Périme dans {jours}j"
+                    niveau, msg = 'faible', f"🟡 Périme dans {jours}j"
                 
                 alertes.append({
                     'id': r['id'], 'nom': r['nom'], 'societe': r['societe'],
@@ -277,6 +323,54 @@ def get_stocks_critiques_route():
         return jsonify({'success': True, 'stocks': alertes[:25]})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})
+
+@dashboard_bp.route('/produits-perimes', methods=['GET'])
+def get_produits_perimes():
+    """Retourne tous les médicaments périmés pour le dashboard"""
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT p.id, p.nom, p.societe, COALESCE(s.quantite, 0) as stock_actuel,
+                   MIN(l.date_peremption) as date_peremption
+            FROM lots_stock l
+            JOIN produits p ON l.produit_id = p.id
+            LEFT JOIN stocks s ON s.produit_id = p.id
+            WHERE l.quantite_actuelle > 0
+              AND l.date_peremption IS NOT NULL
+              AND DATE(l.date_peremption) < DATE('now')
+              AND (LOWER(p.societe) LIKE '%medic%' OR LOWER(p.societe) LIKE '%médic%')
+            GROUP BY p.id
+            ORDER BY MIN(l.date_peremption) ASC
+        ''')
+        rows = cursor.fetchall()
+        produits = []
+        today = datetime.now().date()
+        for row in rows:
+            dp_raw = row['date_peremption']
+            dp = None
+            try:
+                dp = datetime.fromisoformat(str(dp_raw)).date() if dp_raw else None
+            except Exception:
+                dp = None
+            jours = (dp - today).days if dp else None
+            message = jours is not None and jours < 0 and f"PÉRIMÉ il y a {abs(jours)} j" or 'Périmé'
+            produits.append({
+                'id': row['id'],
+                'nom': row['nom'],
+                'societe': row['societe'],
+                'stock_actuel': row['stock_actuel'],
+                'date_peremption': str(row['date_peremption']),
+                'jours_restants': jours,
+                'type_alerte': 'peremption',
+                'niveau': 'critique',
+                'message': message
+            })
+        conn.close()
+        return jsonify({'success': True, 'produits': produits})
+    except Exception as e:
+        print(f"Erreur dashboard/produits-perimes: {str(e)}")
+        return jsonify({'success': False, 'produits': []})
 
 @dashboard_bp.route('/ventes-recentes', methods=['GET'])
 def get_ventes_recentes():

@@ -2,19 +2,19 @@
 
 /* ========== VARIABLES ET RESET ========== */
 :root {
-    --bg-dark: #1A1A1A;
-    --bg-sidebar: #222222;
-    --bg-card: #2A2A2A;
-    --orange: #C1440E;
-    --orange-light: #F4A261;
-    --text-light: #F0EAD6;
-    --text-muted: #A8A09A;
-    --green: #2EC4B6;
-    --blue: #4A90D9;
-    --red: #E63946;
-    --yellow: #FFB627;
-    --purple: #9B5DE5;
-    --border-color: #333333;
+    --bg-dark: #F8FBFF;
+    --bg-sidebar: #E8F2FF;
+    --bg-card: #FFFFFF;
+    --orange: #1C6DD0;
+    --orange-light: #79A9E8;
+    --text-light: #0F1F3A;
+    --text-muted: #5D748B;
+    --green: #2B8CE6;
+    --blue: #1554C0;
+    --red: #D64559;
+    --yellow: #FFD166;
+    --purple: #7C88F5;
+    --border-color: #D6E4F1;
 
     /* Espacements réduits pour 1366x768 */
     --spacing-xs: 4px;
@@ -92,7 +92,7 @@ body {
 .logo-text {
     font-size: 16px;
     font-weight: 600;
-    color: var(--orange);
+    color: var(--blue);
 }
 
 .sidebar.collapsed .logo-text {
@@ -135,12 +135,12 @@ body {
 }
 
 .nav-item:hover {
-    background: rgba(193, 68, 14, 0.1);
-    color: var(--orange-light);
+    background: rgba(28, 109, 208, 0.1);
+    color: var(--blue);
 }
 
 .nav-item.active {
-    background: var(--orange);
+    background: var(--blue);
     color: white;
 }
 
@@ -167,7 +167,7 @@ body {
 .clock-time {
     font-size: 16px;
     font-weight: 600;
-    color: var(--orange);
+    color: var(--blue);
 }
 
 .clock-date {
@@ -287,7 +287,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(193, 68, 14, 0.1);
+    background: rgba(28, 109, 208, 0.1);
     border-radius: 8px;
 }
 
@@ -468,7 +468,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(193, 68, 14, 0.1);
+    background: rgba(28, 109, 208, 0.12);
     border-radius: 6px;
 }
 
@@ -580,6 +580,22 @@ body {
 .badge-autres-produits {
     background: rgba(155, 93, 229, 0.2);
     color: #b185f0;
+}
+
+/* TEXTE EN BLEU */
+.text-blue {
+    color: #1554C0;
+    font-weight: 500;
+}
+
+.badge-green {
+    background: rgba(43, 140, 230, 0.1);
+    color: #1554C0;
+}
+
+.badge-red {
+    background: rgba(214, 69, 89, 0.1);
+    color: #D64559;
 }
 
 /* NOTIFICATIONS */
@@ -711,7 +727,7 @@ body {
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: var(--orange);
+    background: var(--blue);
 }
 
 /* ========== RESPONSIVE ========== */

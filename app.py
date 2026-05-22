@@ -18,11 +18,19 @@ from routes.dashboard import dashboard_bp
 from routes.rapports import rapports_bp
 
 from routes.admin import admin_bp
+import database
 
 # Création de l'application Flask
 app = Flask(__name__, 
             static_folder='static',
             template_folder='templates')
+
+# Initialiser la base de données (création / migrations)
+try:
+    database.init_db()
+except Exception:
+    # Ne pas bloquer le démarrage si l'init échoue, l'erreur sera visible dans les logs
+    pass
 
 app.config['SECRET_KEY'] = 'pharma-moderne-secret-key-2024'
 app.config['NOM_BAR'] = NOM_BAR
@@ -73,17 +81,13 @@ def login():
         
         cursor.execute("SELECT * FROM utilisateurs WHERE LOWER(nom) = LOWER(?)", (username,))
         user = cursor.fetchone()
-        conn.close()
+            
         
         if user:
-            # Vérifier le PIN si l'utilisateur en a un
-            if user['code_pin'] and user['code_pin'] != pin:
-                return render_template('login.html', error="Mot de passe ou PIN incorrect", nom_bar=nom_actuel, utilisateurs=utilisateurs)
-                
+            # Sécurité PIN supprimée : connexion uniquement par nom d'utilisateur.
             session['user_id'] = user['id']
             session['nom'] = user['nom']
             session['role'] = user['role']
-            
             # Rediriger dynamiquement : Admin -> Dashboard principal (/), Employé/Vendeur -> Caisse (/caisse)
             if user['role'] == 'admin':
                 return redirect(url_for('index'))

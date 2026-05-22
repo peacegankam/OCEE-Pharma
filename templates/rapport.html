@@ -102,7 +102,7 @@
         <div class="rapport-kpi rapport-kpi-blue">
             <div class="rapport-kpi-icon">📈</div>
             <div class="rapport-kpi-val" id="rapport-benefice">— FCFA</div>
-            <div class="rapport-kpi-label">Bénéfice brut (FIFO)</div>
+            <div class="rapport-kpi-label">Bénéfice brut</div>
             <div class="rapport-kpi-sub">Marge sur les lots vendus</div>
         </div>
 
@@ -147,32 +147,6 @@
                 <span>Total des ventes</span>
                 <span class="total-value" id="rapport-total-ventes">0 FCFA</span>
             </div>
-        </div>
-    </div>
-
-    <!-- Approvisionnements du jour -->
-    <div class="card mb-1">
-        <div class="card-header">
-            <span class="card-title">🚚 Livraisons du Jour</span>
-            <span class="card-badge" id="rapport-nb-appros">0 livraison(s)</span>
-        </div>
-        <div class="card-body p0">
-            <table class="data-table" id="table-rapport-appro">
-                <thead>
-                    <tr>
-                        <th>Heure</th>
-                        <th>Produit</th>
-                        <th>Société</th>
-                        <th>Qté Reçue</th>
-                        <th>Coût Total</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td colspan="5" class="table-empty">Aucune livraison ce jour</td>
-                    </tr>
-                </tbody>
-            </table>
         </div>
     </div>
 
@@ -245,7 +219,7 @@
     }
 
     function afficherRapport(d) {
-        const vide = !d.nb_ventes && (!d.approvisionnements || d.approvisionnements.length === 0);
+        const vide = !d.nb_ventes;
         document.getElementById('rapport-content').style.display = vide ? 'none' : 'block';
         document.getElementById('rapport-empty').style.display = vide ? 'flex' : 'none';
         if (vide) return;
@@ -258,7 +232,8 @@
         // KPIs
         document.getElementById('rapport-revenus').textContent = formaterFCFA(d.revenus);
         document.getElementById('rapport-cout-produits').textContent = formaterFCFA(d.cout_produits);
-        document.getElementById('rapport-depenses-appro').textContent = formaterFCFA(d.depenses_appro);
+        const depensesEl = document.getElementById('rapport-depenses-appro');
+        if (depensesEl) depensesEl.textContent = formaterFCFA(d.depenses_appro);
         document.getElementById('rapport-benefice').textContent = formaterFCFA(d.benefice);
 
         // Solde net
@@ -280,18 +255,6 @@
         <td>${formaterFCFA(v.prix_unitaire)}</td>
         <td class="bold">${formaterFCFA(v.montant_total)}</td>
       </tr>`).join('') || '<tr><td colspan="6" class="table-empty">—</td></tr>';
-
-        // Appros
-        document.getElementById('rapport-nb-appros').textContent = d.approvisionnements.length + ' livraison(s)';
-        const tbodyA = document.querySelector('#table-rapport-appro tbody');
-        tbodyA.innerHTML = d.approvisionnements.map(a => `
-      <tr>
-        <td>${a.heure}</td>
-        <td>${a.produit}</td>
-        <td>${a.societe}</td>
-        <td>${a.quantite}</td>
-        <td class="bold">${formaterFCFA(a.cout_total)}</td>
-      </tr>`).join('') || '<tr><td colspan="5" class="table-empty">Aucune livraison</td></tr>';
 
         // Par société
         const tbodyS = document.querySelector('#table-rapport-societes tbody');

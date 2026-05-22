@@ -30,7 +30,7 @@
 
                     <div class="form-group">
                         <label for="produit-seuil">Seuil Alerte</label>
-                        <input type="number" id="produit-seuil" name="seuil_alerte" min="1" value="10" />
+                        <input type="number" id="produit-seuil" name="seuil_alerte" min="1" value="20" />
                     </div>
 
                     <div class="form-actions mt-1">
@@ -62,7 +62,7 @@
                         <tr>
                             <th>Nom</th>
                             <th>Société</th>
-                            <th>Stock</th>
+
                             <th>Seuil</th>
                             <th>Date Péremption</th>
                             <th>Actions</th>
@@ -150,11 +150,7 @@
                 <tr id="row-prod-${p.id}">
                     <td class="bold">${p.nom}</td>
                     <td>${badgeSociete(p.societe)}</td>
-                    <td>
-                        <span class="stock-pill ${p.stock_actuel <= p.seuil_alerte ? 'stock-low' : ''}">
-                            ${p.stock_actuel}
-                        </span>
-                    </td>
+
                     <td>${p.seuil_alerte}</td>
                     <td>${badgePeremption}</td>
                     <td>

@@ -1,5 +1,5 @@
 # routes/produits.py - Routes pour la gestion des produits
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, session
 from database import get_db
 from datetime import datetime
 from config import SOCIETES
@@ -67,6 +67,54 @@ def get_produits():
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
+@produits_bp.route('/perimes', methods=['GET'])
+def get_produits_perimes():
+    """Retourne les produits périmés (médicaments)"""
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT p.id, p.nom, p.societe, COALESCE(s.quantite, 0) as stock_actuel,
+                   MIN(l.date_peremption) as date_peremption
+            FROM lots_stock l
+            JOIN produits p ON l.produit_id = p.id
+            LEFT JOIN stocks s ON s.produit_id = p.id
+            WHERE l.quantite_actuelle > 0
+              AND l.date_peremption IS NOT NULL
+              AND DATE(REPLACE(l.date_peremption, 'T', ' ')) < DATE('now')
+              AND (LOWER(p.societe) LIKE '%medic%' OR LOWER(p.societe) LIKE '%médic%')
+            GROUP BY p.id
+            ORDER BY MIN(l.date_peremption) ASC
+        ''')
+        rows = cursor.fetchall()
+        conn.close()
+
+        today = datetime.now().date()
+        produits = []
+        for row in rows:
+            dp_raw = row['date_peremption']
+            dp = None
+            try:
+                dp = datetime.fromisoformat(str(dp_raw)).date() if dp_raw else None
+            except Exception:
+                dp = None
+            jours = (dp - today).days if dp else None
+            produits.append({
+                'id': row['id'],
+                'nom': row['nom'],
+                'societe': row['societe'],
+                'stock_actuel': row['stock_actuel'],
+                'date_peremption': str(row['date_peremption']),
+                'jours_restants': jours,
+                'message': jours is not None and jours < 0 and f"PÉRIMÉ il y a {abs(jours)} j" or 'Périmé',
+                'type_alerte': 'peremption',
+                'niveau': 'critique'
+            })
+
+        return jsonify({'success': True, 'produits': produits})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
 @produits_bp.route('/<int:produit_id>', methods=['GET'])
 def get_produit(produit_id):
     """Retourne un produit spécifique"""
@@ -108,7 +156,11 @@ def create_produit():
         if not societe:
             return jsonify({'success': False, 'message': 'Société manquante'}), 400
         
-        seuil = data.get('seuil_alerte', 10)
+        seuil = data.get('seuil_alerte', 20)
+
+        # Règle métier : un produit nouvellement créé ne doit pas apparaître dans l'option Stock avec une quantité initiale.
+        # La quantité ne sera alimentée que par des approvisionnements et des ventes.
+
         
         conn = get_db()
         cursor = conn.cursor()
@@ -120,22 +172,24 @@ def create_produit():
         ''', (data['nom'], data['societe'], 0, 0, seuil, None))
         
         produit_id = cursor.lastrowid
-        
-        # Création entrée stock avec quantité 0 par défaut
+
+        # Initialiser la ligne stock à 0 pour que le produit apparaisse immédiatement dans l'option Stock.
+        # (Le stock ne sera alimenté qu'après un approvisionnement et/ou une vente.)
         cursor.execute('''
-            INSERT INTO stocks (produit_id, quantite)
-            VALUES (?, ?)
-        ''', (produit_id, 0))
-        
+            INSERT INTO stocks (produit_id, quantite, derniere_maj)
+            VALUES (?, 0, CURRENT_TIMESTAMP)
+        ''', (produit_id,))
+
         conn.commit()
         conn.close()
-        
+
+
+
         return jsonify({
             'success': True,
             'message': 'Produit créé avec succès',
             'produit_id': produit_id
         })
-        
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 

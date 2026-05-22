@@ -74,7 +74,8 @@ class DBProxy:
         self.conn.close()
 
 def get_db():
-    """Retourne une connexion à la base de données configurée"""
+    '''créer une connexion à la base de données et la retourner'''
+    
     if DB_TYPE == 'mysql':
         try:
             conn = pymysql.connect(
@@ -88,8 +89,10 @@ def get_db():
         except pymysql.err.OperationalError as e:
             if e.args[0] == 1049: # Unknown database
                 # Créer la base si elle n'existe pas
+
                 temp_conn = pymysql.connect(
                     host=DB_HOST,
+
                     user=DB_USER,
                     password=DB_PASSWORD
                 )
@@ -148,7 +151,7 @@ def init_db():
             societe VARCHAR(255) NOT NULL,
             prix_achat INTEGER NOT NULL,
             prix_vente INTEGER NOT NULL,
-            seuil_alerte INTEGER DEFAULT 10,
+            seuil_alerte INTEGER DEFAULT 20,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             date_peremption DATE
@@ -215,6 +218,20 @@ def init_db():
             prix_achat_unitaire INTEGER NOT NULL,
             date_appro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             note TEXT
+        )
+    ''')
+
+    # Table des bons de commande (commandes d'achat gérant)
+    cursor.execute(f'''
+        CREATE TABLE IF NOT EXISTS bons_commande (
+            id {pk_auto},
+            produit_nom VARCHAR(255) NOT NULL,
+            societe VARCHAR(255),
+            quantite_cartons INTEGER NOT NULL,
+            fournisseur VARCHAR(255) NOT NULL,
+            date_commande DATE NOT NULL,
+            utilisateur_id INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
     
@@ -314,20 +331,20 @@ def insert_test_data_if_empty():
         
         produits = [
             ('Amoxicilline 500mg', 'Antibiotiques', 1500, 2500, 20),
-            ('Azithromycine 500mg', 'Antibiotiques', 3000, 5000, 10),
-            ('Ciprofloxacine 500mg', 'Antibiotiques', 2000, 3500, 15),
-            ('Paracétamol 500mg', 'Analgésiques', 200, 500, 50),
-            ('Ibuprofène 400mg', 'Analgésiques', 500, 1200, 30),
-            ('Tramadol 50mg', 'Analgésiques', 800, 1500, 15),
-            ('Vitamine C 1000mg', 'Vitamines', 1500, 2800, 25),
-            ('Multivitamines', 'Vitamines', 3500, 6000, 10),
-            ('Calcium + D3', 'Vitamines', 2500, 4500, 15),
+            ('Azithromycine 500mg', 'Antibiotiques', 3000, 5000, 20),
+            ('Ciprofloxacine 500mg', 'Antibiotiques', 2000, 3500, 20),
+            ('Paracétamol 500mg', 'Analgésiques', 200, 500, 20),
+            ('Ibuprofène 400mg', 'Analgésiques', 500, 1200, 20),
+            ('Tramadol 50mg', 'Analgésiques', 800, 1500, 20),
+            ('Vitamine C 1000mg', 'Vitamines', 1500, 2800, 20),
+            ('Multivitamines', 'Vitamines', 3500, 6000, 20),
+            ('Calcium + D3', 'Vitamines', 2500, 4500, 20),
             ('Betamethasone Crème', 'Dermatologie', 1200, 2200, 20),
-            ('Sélénium Shampooing', 'Dermatologie', 4500, 7500, 10),
-            ('Crème Hydratante', 'Dermatologie', 3000, 5500, 15),
-            ('Thermomètre Digital', 'Matériel Médical', 1500, 3500, 10),
-            ('Tensiomètre Brassard', 'Matériel Médical', 15000, 25000, 5),
-            ('Pansements Autocollants', 'Matériel Médical', 500, 1000, 40)
+            ('Sélénium Shampooing', 'Dermatologie', 4500, 7500, 20),
+            ('Crème Hydratante', 'Dermatologie', 3000, 5500, 20),
+            ('Thermomètre Digital', 'Matériel Médical', 1500, 3500, 20),
+            ('Tensiomètre Brassard', 'Matériel Médical', 15000, 25000, 20),
+            ('Pansements Autocollants', 'Matériel Médical', 500, 1000, 20)
         ]
         
         import random
@@ -442,7 +459,7 @@ def get_stats_globales():
     cursor.execute('''
         SELECT COALESCE(SUM(perte_financiere), 0) as total_perte
         FROM historique_stock
-        WHERE DATE(REPLACE(date_mouvement, 'T', ' ')) = ? AND type = 'Ajustement (-)'
+        WHERE DATE(REPLACE(date_mouvement, 'T', ' ')) = ? AND type = 'retrait'
     ''', (today.isoformat(),))
     row_perte = cursor.fetchone()
     pertes_jour = row_perte['total_perte'] if row_perte else 0

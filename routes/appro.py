@@ -45,8 +45,16 @@ def enregistrer_appro():
         quantite_cartons = data['quantite_cartons']
         produits_par_carton = data['produits_par_carton']
         date_perempt = data['date_peremption']
+        date_reception = data.get('date_reception', '').strip()
         fournisseur = data.get('fournisseur', '').strip()
+
+        # Si fournisseur n'est pas fourni (champ retiré côté UI), on l'ignore côté API.
+        # (champ stocké éventuellement dans lots_stock)
+        if not fournisseur:
+            fournisseur = ''
+
         note = data.get('note', '')
+
 
         if quantite_cartons <= 0 or produits_par_carton <= 0 or prix_carton <= 0:
             return jsonify({'success': False, 'message': 'Quantités et prix doivent être strictement positifs'}), 400
@@ -80,22 +88,13 @@ def enregistrer_appro():
 
         ancien_stock = stock_actuel['quantite'] if stock_actuel else 0
         seuil_alerte = produit['seuil_alerte'] if 'seuil_alerte' in produit.keys() else None
-        date_actuelle = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-        # Éviter qu'un employé en rupture déclenche une livraison réservée au gérant
-        est_role_admin = (session.get('role') == 'admin')
-        en_alerte = False
-        if seuil_alerte is not None:
-            en_alerte = (ancien_stock is not None and ancien_stock <= seuil_alerte)
+        if date_reception:
+            try:
+                date_actuelle = datetime.strptime(date_reception, '%Y-%m-%d').strftime('%Y-%m-%d') + ' ' + datetime.now().strftime('%H:%M:%S')
+            except Exception:
+                date_actuelle = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         else:
-            en_alerte = (ancien_stock == 0)
-
-        if (not est_role_admin) and en_alerte:
-            conn.close()
-            return jsonify({
-                'success': False,
-                'message': "Action réservée au gérant : livraison pour produit en rupture/alerte (stock <= seuil)."
-            }), 403
+            date_actuelle = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
         stock_initial_details = get_lots_details_str(cursor, produit_id)
 
@@ -165,10 +164,35 @@ def get_fournisseurs():
     try:
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute('SELECT id, nom FROM fournisseurs ORDER BY nom ASC')
-        fournisseurs = cursor.fetchall()
+        cursor.execute('SELECT id, nom FROM fournisseurs')
+        rows = cursor.fetchall()
         conn.close()
-        return jsonify({'success': True, 'fournisseurs': [dict(f) for f in fournisseurs]})
+
+        # Normaliser quelques variantes de noms et ordonner
+        preferred = ['Ubipharm', 'Laborex', 'PharmaCentrale']
+        norm_map = {
+            'ubipharma': 'Ubipharm',
+            'ubipharm': 'Ubipharm',
+            'pharmacentral': 'PharmaCentrale',
+            'pharmacentrale': 'PharmaCentrale'
+        }
+
+        fournisseurs = []
+        for r in rows:
+            nom = r['nom'] or ''
+            key = nom.replace(' ', '').lower()
+            if key in norm_map:
+                nom_norm = norm_map[key]
+            else:
+                nom_norm = nom
+            fournisseurs.append({'id': r['id'], 'nom': nom_norm})
+
+        # Mettre en tête les préférés dans l'ordre donné
+        pref_list = [f for name in preferred for f in fournisseurs if f['nom'] == name]
+        others = [f for f in fournisseurs if f['nom'] not in preferred]
+        ordered = pref_list + sorted(others, key=lambda x: (x['nom'] or '').lower())
+
+        return jsonify({'success': True, 'fournisseurs': ordered})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
@@ -200,70 +224,43 @@ def creer_fournisseur():
 
 @appro_bp.route('/bon-commande', methods=['POST'])
 def enregistrer_bon_commande():
-    """Enregistre un bon de commande sous forme d'approvisionnements."""
+    """Enregistre un bon de commande."""
     try:
-        data = request.get_json() or {}
-        lignes = data.get('lignes', [])
-        date_commande = data.get('date')
-        fournisseur = data.get('fournisseur', '').strip()
+        if session.get('role') != 'admin':
+            return jsonify({'success': False, 'message': 'Accès refusé : seul le gérant peut enregistrer un bon de commande.'}), 403
 
+        data = request.get_json() or {}
+        produit_nom = (data.get('produit_nom') or '').strip()
+        societe = (data.get('societe') or '').strip()
+        quantite_cartons = data.get('quantite_cartons')
+        fournisseur = (data.get('fournisseur') or '').strip()
+        date_commande = data.get('date_commande')
+
+        if not produit_nom:
+            return jsonify({'success': False, 'message': 'Nom du médicament requis.'}), 400
+        if not societe:
+            return jsonify({'success': False, 'message': 'Famille/société du produit requise.'}), 400
+        if not quantite_cartons or int(quantite_cartons) <= 0:
+            return jsonify({'success': False, 'message': 'Nombre de cartons doit être strictement positif.'}), 400
+        if not fournisseur:
+            return jsonify({'success': False, 'message': 'Fournisseur requis.'}), 400
         if not date_commande:
-            return jsonify({'success': False, 'message': 'Date du bon de commande requise'}), 400
-        if not lignes or not isinstance(lignes, list):
-            return jsonify({'success': False, 'message': 'Aucune ligne de commande fournie'}), 400
+            return jsonify({'success': False, 'message': 'Date de commande requise.'}), 400
 
         conn = get_db()
         cursor = conn.cursor()
-        date_actuelle = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        total_lignes = 0
+        cursor.execute('''
+            INSERT INTO bons_commande
+            (produit_nom, societe, quantite_cartons, fournisseur, date_commande, utilisateur_id)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (produit_nom, societe, int(quantite_cartons), fournisseur, date_commande, session.get('user_id')))
 
-        for ligne in lignes:
-            produit_id = ligne.get('produit_id')
-            quantite = ligne.get('quantite')
-            prix_achat = ligne.get('prix_achat_unitaire')
-            note = ligne.get('note', '').strip() or f'Bon de commande {date_commande} - {fournisseur or "Fournisseur"}'
+        conn.commit()
+        conn.close()
 
-            if not produit_id or not quantite or quantite <= 0:
-                continue
-
-            cursor.execute('SELECT * FROM produits WHERE id = ?', (produit_id,))
-            produit = cursor.fetchone()
-            if not produit:
-                continue
-
-            if prix_achat is None:
-                prix_achat = produit['prix_achat']
-
-            cursor.execute('SELECT quantite FROM stocks WHERE produit_id = ?', (produit_id,))
-            stock_actuel = cursor.fetchone()
-            ancien_stock = stock_actuel['quantite'] if stock_actuel else 0
-
-            cursor.execute('''
-                INSERT INTO approvisionnements
-                (produit_id, quantite, prix_achat_unitaire, note, date_appro)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (produit_id, quantite, prix_achat, note, date_actuelle))
-
-            if stock_actuel:
-                cursor.execute('''
-                    UPDATE stocks
-                    SET quantite = quantite + ?,
-                        derniere_maj = ?
-                    WHERE produit_id = ?
-                ''', (quantite, date_actuelle, produit_id))
-            else:
-                cursor.execute('''
-                    INSERT INTO stocks (produit_id, quantite, derniere_maj)
-                    VALUES (?, ?, ?)
-                ''', (produit_id, quantite, date_actuelle))
-
-            cursor.execute('''
-                INSERT INTO historique_stock
-                (produit_id, quantite_avant, quantite_apres, type, raison, date_mouvement)
-                VALUES (?, ?, ?, 'appro', ?, ?)
-            ''', (produit_id, ancien_stock, ancien_stock + quantite, note, date_actuelle))
-
-            total_lignes += 1
+        return jsonify({'success': True, 'message': 'Bon de commande enregistré avec succès.'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
 
         if total_lignes == 0:
             conn.close()

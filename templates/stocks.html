@@ -35,13 +35,12 @@
                             <option value="">— Choisir un motif —</option>
                             <option value="Retrait produit périmé">Retrait produit périmé</option>
                             <option value="Casse">Casse</option>
-                            <option value="Correction inventaire négatif">Correction inventaire négatif</option>
                         </select>
                     </div>
 
                     <div class="form-group">
                         <label>Raison / Note</label>
-                        <textarea id="ajust-raison" name="raison" readonly placeholder="La raison est générée automatiquement selon le motif choisi."></textarea>
+                        <textarea id="ajust-raison" name="raison" readonly placeholder=""></textarea>
                     </div>
 
                     <div class="form-group" id="ajust-quantite-row">
@@ -65,7 +64,7 @@
         <!-- Alertes de stock -->
         <div class="card mt-1">
             <div class="card-header">
-                <span class="card-title text-red">⚠️ Ruptures & Alertes</span>
+                <span class="card-title text-red">Ruptures & Alertes</span>
             </div>
             <div class="card-body p0">
                 <div class="alert-list" id="liste-alertes-stock">
@@ -98,7 +97,6 @@
                             <th>Stock initial</th>
                             <th>Stock total</th>
                             <th>Stock détaillé</th>
-                            <th>Note</th>
                             <th>Auteur</th>
                         </tr>
                     </thead>
@@ -220,7 +218,10 @@
             const tbody = document.querySelector('#table-mouvements-stock tbody');
             tbody.innerHTML = pageData.map(h => {
                 const diff = h.quantite_apres - h.quantite_avant;
-                const sign = diff >= 0 ? `+${diff}` : `${diff}`;
+                // Afficher les ventes en positif (quantité consommée)
+                const sign = (h.type === 'vente' || h.type === 'sortie' || h.type === 'retrait') 
+                    ? `${Math.abs(diff)}` 
+                    : (diff >= 0 ? `+${diff}` : `${diff}`);
                 const initialHtml = (h.stock_initial_details || '—').replace(/\n/g, '<br>');
                 const finalHtml = (h.stock_final_details || '—').replace(/\n/g, '<br>');
                 
@@ -231,7 +232,7 @@
                 if (h.raison && h.raison.includes('Retrait produit périmé')) {
                     rowClass = ' style="background-color: rgba(230, 57, 70, 0.15);"';
                 }
-                
+
                 return `
                 <tr${rowClass}>
                     <td class="text-sm">${new Date(h.date_mouvement).toLocaleString()}</td>
@@ -245,16 +246,15 @@
                     <td class="text-sm" style="font-size: 11px; line-height: 1.2; color: var(--text-muted);">${initialHtml}</td>
                     <td class="bold">${h.quantite_apres}</td>
                     <td class="text-sm" style="font-size: 11px; line-height: 1.2; ${rowClass ? 'color: #E63946; font-weight: bold;' : 'color: var(--text-muted);'}">${finalHtml}</td>
-                    <td class="text-muted text-sm italic">${h.raison || '—'}</td>
                     <td>
                         <span class="text-sm">
-                            ${h.auteur_nom || 'Système'} 
+                            ${h.auteur_nom || 'Gérant'} 
                             ${h.auteur_role ? `<small>(${h.auteur_role})</small>` : ''}
                         </span>
                     </td>
                 </tr>
                 `;
-            }).join('') || '<tr><td colspan="9" class="table-empty">Aucun mouvement</td></tr>';
+            }).join('') || '<tr><td colspan="8" class="table-empty">Aucun mouvement</td></tr>';
         }, 10);
     }
 

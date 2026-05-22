@@ -14,7 +14,6 @@
             <div class="kpi-content">
                 <div class="kpi-title">Revenus du jour</div>
                 <div class="kpi-value"><span id="kpi-revenus">0</span> <span class="currency">FCFA</span></div>
-                <div class="kpi-trend positive">+12% vs hier</div>
             </div>
         </div>
         <div class="kpi-card">
@@ -36,13 +35,22 @@
             </div>
         </div>
 
+        <div class="kpi-card">
+            <div class="kpi-icon"><i class="fas fa-exclamation-triangle"></i></div>
+            <div class="kpi-content">
+                <div class="kpi-title">Produits périmés</div>
+                <div class="kpi-value" id="kpi-perimes">0</div>
+                <div class="kpi-trend negative" style="color:#e63946;">Nombre de produits</div>
+            </div>
+        </div>
+
         {% if session.get('role') == 'admin' %}
         <div class="kpi-card">
             <div class="kpi-icon"><i class="fas fa-arrow-trend-up"></i></div>
             <div class="kpi-content">
                 <div class="kpi-title">Bénéfice du jour</div>
                 <div class="kpi-value"><span id="kpi-benefice">0</span> <span class="currency">FCFA</span></div>
-                <div class="kpi-trend positive">Bénéfice FIFO</div>
+                <div class="kpi-trend positive">Bénéfice</div>
             </div>
         </div>
         <div class="kpi-card">
@@ -68,20 +76,6 @@
     {% if session.get('role') == 'admin' %}
     <!-- ========== SECTION 2 : GRAPHIQUES ========== -->
     <div class="charts-grid">
-        <!-- Graphique revenus semaine -->
-        <div class="chart-card">
-            <div class="chart-header">
-                <h3>Revenus des 7 derniers jours</h3>
-                <div class="chart-legend">
-                    <span class="legend-dot" style="background: #C1440E;"></span> Revenus
-                </div>
-            </div>
-            <div class="chart-container">
-                <canvas id="chart-revenus-semaine"></canvas>
-                <div class="chart-loader" id="loader-revenus" style="display: none;">Chargement...</div>
-            </div>
-        </div>
-
         <!-- Graphique top produits -->
         <div class="chart-card">
             <div class="chart-header">
@@ -107,53 +101,8 @@
             </div>
         </div>
 
-        <!-- Graphique stocks critiques -->
-        <div class="chart-card">
-            <div class="chart-header">
-                <h3>Stocks les plus bas</h3>
-                <div class="chart-legend">
-                    <span class="legend-dot" style="background: #E63946;"></span> Niveau stock
-                </div>
-            </div>
-            <div class="chart-container">
-                <canvas id="chart-stocks-bas"></canvas>
-                <div class="chart-loader" id="loader-stocks" style="display: none;">Chargement...</div>
-            </div>
         </div>
-    </div>
     {% endif %}
-
-    <!-- ========== SECTION 3 : TABLEAU DES STOCKS CRITIQUES ========== -->
-    <div class="table-card">
-        <div class="table-header">
-            <h3><i class="fas fa-boxes-stacked"></i> Stocks critiques</h3>
-            <div class="table-actions">
-                <span class="badge-count" id="badge-critiques-header">0 produit(s)</span>
-                <button class="btn-refresh-small" onclick="chargerStocksCritiques()"><i
-                        class="fas fa-sync"></i></button>
-            </div>
-        </div>
-
-        <div class="table-responsive" id="table-stocks-critiques-container">
-            <table class="data-table" id="table-stocks-critiques">
-                <thead>
-                    <tr>
-                        <th>Produit</th>
-                        <th>Catégorie</th>
-                        <th>Stock actuel</th>
-                        <th>Seuil alerte</th>
-                        <th>État</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <!-- Les données seront chargées dynamiquement -->
-                    <tr>
-                        <td colspan="5" class="table-loading">Chargement des données...</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
 
     <!-- ========== SECTION 4 : ACTIVITÉ RÉCENTE & IA ========== -->
     <div class="activity-grid">
@@ -192,19 +141,14 @@
         if (typeof chargerKPIs === 'function') {
             chargerKPIs();
         }
-        if (typeof chargerStocksCritiques === 'function') {
-            chargerStocksCritiques();
-        }
         if (typeof chargerAlertesHeader === 'function') {
             chargerAlertesHeader();
         }
 
         // Charger les graphiques
-        if (typeof chargerRevenusSemaine === 'function') {
-            chargerRevenusSemaine();
+        if (typeof chargerTopProduits === 'function') {
             chargerTopProduits();
             chargerRepartitionSocietes();
-            chargerGraphStocksBas();
         } else {
             console.error("❌ Fonctions charts.js non disponibles");
         }
@@ -225,14 +169,36 @@
             })
             .catch(() => afficherDernieresVentes([]));
 
-        // Alertes consolidées (ruptures, stock bas, péremption)
-        fetch('/api/dashboard/stocks-critiques')
-            .then(response => response.json())
-            .then(data => {
-                const stocks = (data && data.success && data.stocks) ? data.stocks : [];
-                afficherAlertesRapides(stocks);
-            })
-            .catch(() => afficherAlertesRapides([]));
+        Promise.all([
+            fetch('/api/dashboard/stocks-critiques').then(r => r.json()).catch(() => ({ success: false, stocks: [] })),
+            fetch('/api/dashboard/produits-perimes').then(r => r.json()).catch(() => ({ success: false, produits: [] }))
+        ]).then(([stocksData, perimesData]) => {
+            const stocks = (stocksData && stocksData.success && Array.isArray(stocksData.stocks)) ? stocksData.stocks : [];
+            const perimes = (perimesData && perimesData.success && Array.isArray(perimesData.produits)) ? perimesData.produits : [];
+            afficherAlertesRapides(mergeAlertesPeremption(stocks, perimes));
+        }).catch(() => afficherAlertesRapides([]));
+    }
+
+    function mergeAlertesPeremption(stocks, perimes) {
+        const map = new Map();
+        stocks.forEach(item => {
+            if (!item || item.id === undefined) return;
+            map.set(item.id, item);
+        });
+        perimes.forEach(item => {
+            if (!item || item.id === undefined) return;
+            map.set(item.id, {
+                id: item.id,
+                nom: item.nom,
+                societe: item.societe,
+                quantite: item.stock_actuel ?? 0,
+                jours_restants: item.jours_restants,
+                type_alerte: 'peremption',
+                niveau: 'critique',
+                message: item.message || 'Périmé'
+            });
+        });
+        return Array.from(map.values());
     }
 
     function afficherDernieresVentes(ventes) {
@@ -272,11 +238,23 @@
         }
 
         container.innerHTML = stocks.map(s => {
-            const level = s.niveau || 'faible';
-            const icon = s.type_alerte === 'peremption' ? '📅' : (s.type_alerte === 'rupture' ? '🚫' : '⚠️');
-            
+            let bg = '#ffc107';
+            let icon = '⚠️';
+            if (s.type_alerte === 'rupture') {
+                bg = '#27ae60';
+                icon = '🟢';
+            } else if (s.type_alerte === 'peremption') {
+                if (s.jours_restants !== null && s.jours_restants < 0) {
+                    bg = '#e63946';
+                    icon = '🔴';
+                } else {
+                    bg = '#4a90d9';
+                    icon = '🔵';
+                }
+            }
+
             return `
-                <div class="alert-item ${level}">
+                <div class="alert-item" style="background:${bg}; color:#fff; border: 1px solid rgba(255,255,255,0.12);">
                     <div class="alert-icon">${icon}</div>
                     <div class="alert-content">
                         <div class="alert-title">${s.nom}</div>

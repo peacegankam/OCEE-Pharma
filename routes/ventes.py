@@ -142,7 +142,9 @@ def enregistrer_vente():
                 INSERT INTO historique_stock 
                 (produit_id, quantite_avant, quantite_apres, type, raison, date_mouvement, utilisateur_id,
                  stock_initial_details, stock_final_details, perte_financiere)
-                VALUES (?, ?, ?, 'vente', 'Vente FIFO', ?, ?, ?, ?, 0)
+                VALUES (?, ?, ?, 'vente', NULL, ?, ?, ?, ?, 0)
+
+
             ''', (produit_id, s_avant, s_apres, date_actuelle, vendeur_id, stock_initial_details, stock_final_details))
 
             total_vente += quantite_a_vendre * prix_final
@@ -176,7 +178,7 @@ def get_ventes_aujourdhui():
                    p.nom, p.societe, p.prix_achat
             FROM ventes v
             JOIN produits p ON v.produit_id = p.id
-            WHERE DATE(v.date_vente) = ?
+            WHERE DATE(REPLACE(v.date_vente, 'T', ' ')) = ?
             ORDER BY v.date_vente DESC
         ''', (today.isoformat(),))
         rows = cursor.fetchall()

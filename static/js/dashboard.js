@@ -176,6 +176,7 @@ function chargerKPIs() {
       set('kpi-revenus',  formaterMontant(data.revenus_jour || 0));
       set('kpi-revenus-mois', formaterMontant(data.revenus_mensuel || 0));
       set('kpi-ventes',   formaterQuantite(data.ventes_jour || 0) + ' produits');
+      set('kpi-perimes',  formaterQuantite(data.alertes_perimes || 0));
       set('kpi-benefice', formaterMontant(data.benefice_jour || 0));
       set('kpi-pertes',   formaterMontant(data.pertes_jour || 0));
       set('kpi-alertes',  formaterQuantite(data.alertes_stock || 0) + ' produits');

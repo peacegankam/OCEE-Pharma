@@ -24,9 +24,9 @@
                             <option value="admin">Administrateur</option>
                         </select>
                     </div>
-                    <div class="form-group">
+                    <div class="form-group" style="display:none;">
                         <label>Mot de passe / PIN</label>
-                        <input type="password" id="emp-pin" name="code_pin" placeholder="Optionnel pour vendeur, Obligatoire pour admin" />
+                        <input type="password" id="emp-pin" name="code_pin" placeholder="Optionnel" />
                     </div>
                     <button type="submit" class="btn btn-primary btn-full">
                         Créer le Compte
@@ -35,17 +35,8 @@
             </div>
         </div>
 
-        <div class="card mt-1">
-            <div class="card-header">
-                <span class="card-title">💡 Info</span>
-            </div>
-            <div class="card-body">
-                <p class="text-sm text-muted">
-                    Les administrateurs ont besoin d'un mot de passe pour se connecter. Les vendeurs peuvent également en avoir un pour sécuriser leur compte.
-                </p>
-            </div>
-        </div>
     </div>
+
 
     <!-- ── LISTE DES UTILISATEURS ── -->
     <div class="main-panel">
@@ -107,7 +98,7 @@
         const data = {
             nom: document.getElementById('emp-nom').value,
             role: document.getElementById('emp-role').value,
-            code_pin: document.getElementById('emp-pin').value
+            code_pin: ''
         };
 
         fetch('/admin/api/employes', {
